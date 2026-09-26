@@ -11,10 +11,10 @@ Start from the human's own words, in their language. This is a lightweight discu
 2. Create a temporary directory with `mktemp -d` and write `proposal.txt` there in exactly this format (blank approval lines, no other headings):
 
    ```text
-   何について：<one concrete proposal>
+   <one concrete proposal>
    承認/コメント：
 
-   何について：<another proposal>
+   <another proposal>
    承認/コメント：
    ```
 

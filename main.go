@@ -26,9 +26,6 @@ func parse(r io.Reader) ([]item, error) {
 		if line == "" {
 			continue
 		}
-		if !strings.HasPrefix(line, "何について：") {
-			return nil, fmt.Errorf("expected 何について：, got %q", line)
-		}
 		topic := strings.TrimSpace(strings.TrimPrefix(line, "何について："))
 		if topic == "" {
 			return nil, errors.New("empty topic")
@@ -50,7 +47,7 @@ func parse(r io.Reader) ([]item, error) {
 func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reader) (string, error)) error {
 	r := bufio.NewReader(in)
 	for i := 0; i < len(items); {
-		fmt.Fprintf(out, "\n[%d/%d] 何について：%s\na 承認   c コメント   Enter 未確認   b 戻る   q 中断\n> ", i+1, len(items), items[i].topic)
+		fmt.Fprintf(out, "\n[%d/%d] %s\na 承認   c コメント   Enter 未確認   b 戻る   q 中断\n> ", i+1, len(items), items[i].topic)
 		key, err := r.ReadByte()
 		if err != nil {
 			return fmt.Errorf("review interrupted: %w", err)
@@ -93,7 +90,7 @@ func stty(tty *os.File, args ...string) (string, error) {
 func render(items []item) string {
 	var b strings.Builder
 	for _, item := range items {
-		fmt.Fprintf(&b, "何について：%s\n承認/コメント：%s\n\n", item.topic, item.answer)
+		fmt.Fprintf(&b, "%s\n承認/コメント：%s\n\n", item.topic, item.answer)
 	}
 	return b.String()
 }
