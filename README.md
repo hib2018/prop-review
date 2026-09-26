@@ -1,10 +1,10 @@
-# zcomment
+# prop-review
 
 提案を項目ごとに人間が承認・コメントする、ローカルの小さなCLIです。zintentの意味確認・承認ゲートとは別物です。
 
 ```sh
 go install .
-zcomment proposal.txt
+prop-review proposal.txt
 ```
 
 `proposal.txt` は次の形式で作ります。承認欄は必ず空欄にしてください。
@@ -19,6 +19,6 @@ zcomment proposal.txt
 
 以前の `何について：` 付きの提案ファイルも読み込めます。結果にはこの接頭辞を出力しません。
 
-端末で各項目に `a`（即承認）、`c`（コメント入力）、Enter（未確認）、`b`（前の項目に戻る）、`q`（保存せず中断）を押します。結果は `proposal.review.txt` に保存され、パスが標準出力に表示されます。既存の結果ファイルは上書きしません。別名で残す場合は `zcomment proposal.txt second.review.txt` と指定してください。入力が途中で終了した場合も、結果は保存されません。
+端末で各項目に `a`（即承認）、`c`（コメント入力）、Enter（未確認）、`b`（前の項目に戻る）、`q`（保存せず中断）を押します。結果は `proposal.review.txt` に保存され、パスが標準出力に表示されます。既存の結果ファイルは上書きしません。別名で残す場合は `prop-review proposal.txt second.review.txt` と指定してください。入力が途中で終了した場合も、結果は保存されません。
 
 このツールは結果を記録するだけです。コメントへの対応や作業の開始は自動化しません。

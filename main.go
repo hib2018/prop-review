@@ -97,7 +97,7 @@ func render(items []item) string {
 
 func run(args []string) error {
 	if len(args) < 1 || len(args) > 2 {
-		return errors.New("usage: zcomment proposal.txt [result.txt]")
+		return errors.New("usage: prop-review proposal.txt [result.txt]")
 	}
 	input, err := os.Open(args[0])
 	if err != nil {
