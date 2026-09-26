@@ -14,7 +14,16 @@ if [ ! -e "$HOME/.pi/agent/skills/prop-review" ] && [ ! -L "$HOME/.pi/agent/skil
 fi
 ```
 
-既に Skill の配置先がある場合は上書きしません。リンク先を確認してください。Pi を起動中なら `/reload` で Skill を再読み込みします。
+Pi 以外で Agent Skills のユーザー共通ディレクトリ `~/.agents/skills` に対応するツールを使う場合は、こちらにもリンクします。
+
+```sh
+mkdir -p "$HOME/.agents/skills"
+if [ ! -e "$HOME/.agents/skills/prop-review" ] && [ ! -L "$HOME/.agents/skills/prop-review" ]; then
+  ln -s "$PWD/skills/prop-review" "$HOME/.agents/skills/prop-review"
+fi
+```
+
+既に Skill の配置先がある場合は上書きしません。リンク先を確認してください。Pi を起動中なら `/reload` で Skill を再読み込みします。ツール固有の Skill ディレクトリを使う場合は、そのディレクトリに同様にリンクしてください。
 
 ```sh
 prop-review
