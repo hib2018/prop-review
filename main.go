@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 type item struct {
@@ -44,17 +47,47 @@ func parse(r io.Reader) ([]item, error) {
 	return items, nil
 }
 
-func review(items []item, in io.Reader, out io.Writer) error {
+func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reader) (string, error)) error {
 	r := bufio.NewReader(in)
-	for i := range items {
-		fmt.Fprintf(out, "何について：%s\n承認 / コメント（空欄は未確認）：", items[i].topic)
-		line, err := r.ReadString('\n')
+	for i := 0; i < len(items); {
+		fmt.Fprintf(out, "\n[%d/%d] 何について：%s\na 承認   c コメント   Enter 未確認   b 戻る   q 中断\n> ", i+1, len(items), items[i].topic)
+		key, err := r.ReadByte()
 		if err != nil {
 			return fmt.Errorf("review interrupted: %w", err)
 		}
-		items[i].answer = strings.TrimSpace(line)
+		switch key {
+		case 'a':
+			items[i].answer = "承認"
+			i++
+		case 'c':
+			answer, err := comment(r)
+			if err != nil {
+				return fmt.Errorf("review interrupted: %w", err)
+			}
+			items[i].answer = answer
+			i++
+		case '\r', '\n':
+			items[i].answer = ""
+			i++
+		case 'b':
+			if i > 0 {
+				i--
+			}
+		case 'q':
+			return errors.New("review cancelled; nothing saved")
+		}
 	}
 	return nil
+}
+
+func stty(tty *os.File, args ...string) (string, error) {
+	cmd := exec.Command("stty", args...)
+	cmd.Stdin = tty
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("stty %v: %s: %w", args, strings.TrimSpace(string(output)), err)
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
 func render(items []item) string {
@@ -82,12 +115,47 @@ func run(args []string) error {
 	if len(args) == 2 {
 		output = args[1]
 	}
+	if _, err := os.Stat(output); err == nil {
+		return fmt.Errorf("result already exists: %s", output)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
 		return fmt.Errorf("human review requires a terminal: %w", err)
 	}
 	defer tty.Close()
-	if err := review(items, tty, tty); err != nil {
+	saved, err := stty(tty, "-g")
+	if err != nil {
+		return err
+	}
+	if _, err := stty(tty, "-echo", "-icanon", "min", "1", "time", "0"); err != nil {
+		return err
+	}
+	defer stty(tty, saved)
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(signals)
+	go func() {
+		<-signals
+		stty(tty, saved)
+		os.Exit(130)
+	}()
+	comment := func(r *bufio.Reader) (string, error) {
+		if _, err := stty(tty, saved); err != nil {
+			return "", err
+		}
+		fmt.Fprint(tty, "\nコメント：")
+		line, err := r.ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+		if _, err := stty(tty, "-echo", "-icanon", "min", "1", "time", "0"); err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(line), nil
+	}
+	if err := review(items, tty, tty, comment); err != nil {
 		return err
 	}
 	f, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
