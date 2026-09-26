@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -55,14 +56,19 @@ func parse(r io.Reader) ([]item, error) {
 
 func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reader, bool) (string, error)) error {
 	r := bufio.NewReader(in)
+	showPrompt := true
 	for i := 0; i < len(items); {
-		fmt.Fprintf(out, "\n[%d/%d] %s\na 承認   c コメント   m 複数行   Enter 未確認   b 戻る   q 中断\n> ", i+1, len(items), items[i].topic)
+		if showPrompt {
+			fmt.Fprintf(out, "\n[%d/%d] %s\na 承認   c コメント   m 複数行   Enter 未確認   b 戻る   q 中断\n> ", i+1, len(items), items[i].topic)
+			showPrompt = false
+		}
 		key, _, err := r.ReadRune()
 		if err != nil {
 			return fmt.Errorf("review interrupted: %w", err)
 		}
 		if key == utf8.RuneError {
 			fmt.Fprint(out, "\n入力の文字コードを確認してください\n")
+			showPrompt = true
 			continue
 		}
 		if key >= 'ａ' && key <= 'ｚ' {
@@ -73,9 +79,11 @@ func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reade
 			items[i].answer = "承認"
 			items[i].comment = false
 			i++
+			showPrompt = true
 		case 'c', 'm':
 			answer, err := comment(r, key == 'm')
 			if errors.Is(err, errCommentBack) {
+				showPrompt = true
 				continue
 			}
 			if err != nil {
@@ -84,19 +92,30 @@ func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reade
 			items[i].answer = answer
 			items[i].comment = answer != ""
 			i++
+			showPrompt = true
 		case '\r', '\n':
 			items[i].answer = ""
 			items[i].comment = false
 			i++
+			showPrompt = true
 		case 'b':
 			if i > 0 {
 				i--
+				showPrompt = true
 			}
 		case 'q':
 			return errors.New("review cancelled; nothing saved")
 		}
 	}
 	return nil
+}
+
+// ponytail: width covers common Japanese/fullwidth/emoji; use a terminal-width library if other scripts need exact erasure.
+func displayWidth(r rune) int {
+	if unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul) || r >= 0x3000 && r <= 0x303f || r >= 0xff01 && r <= 0xff60 || r >= 0x1f300 && r <= 0x1faff {
+		return 2
+	}
+	return 1
 }
 
 func inputLine(r *bufio.Reader, out io.Writer, prompt string) (string, error) {
@@ -117,9 +136,9 @@ func inputLine(r *bufio.Reader, out io.Writer, prompt string) (string, error) {
 			return line, nil
 		case '\b', 127:
 			if line != "" {
-				_, size := utf8.DecodeLastRuneInString(line)
+				last, size := utf8.DecodeLastRuneInString(line)
 				line = line[:len(line)-size]
-				fmt.Fprintf(out, "\r\x1b[2K%s%s", prompt, line)
+				fmt.Fprintf(out, "\x1b[%dD\x1b[0K", displayWidth(last))
 			}
 		case utf8.RuneError:
 			badEncoding = true

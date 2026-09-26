@@ -88,7 +88,14 @@ func TestNoImplicitApproval(t *testing.T) {
 	}
 	var output strings.Builder
 	line, err := inputLine(bufio.NewReader(strings.NewReader("あい\bう\n")), &output, "コメント：")
-	if err != nil || line != "あう" || !strings.Contains(output.String(), "\r\x1b[2Kコメント：あ") {
+	if err != nil || line != "あう" || !strings.Contains(output.String(), "\x1b[2D\x1b[0K") || strings.Contains(output.String(), "\r") {
 		t.Fatalf("Japanese deletion: %q, %v, %q", line, err, output.String())
+	}
+	var menu strings.Builder
+	if err := review([]item{{topic: "test"}}, strings.NewReader("xyzq"), &menu, comment); err == nil {
+		t.Fatal("q should cancel")
+	}
+	if strings.Count(menu.String(), "[1/1]") != 1 {
+		t.Fatalf("invalid keys should not scroll menu: %q", menu.String())
 	}
 }
