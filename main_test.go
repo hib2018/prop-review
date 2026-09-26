@@ -3,9 +3,51 @@ package main
 import (
 	"bufio"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestLatestProposal(t *testing.T) {
+	root := t.TempDir()
+	makeProposal := func(name string, when time.Time) string {
+		t.Helper()
+		dir := filepath.Join(root, "prop-review-tmp", name)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(dir, "proposal.txt")
+		if err := os.WriteFile(path, []byte("変更する\n承認/コメント：\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, when, when); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	if _, err := latestProposal(root); err == nil {
+		t.Fatal("empty directory should fail")
+	}
+	older := makeProposal("review.old", time.Now().Add(-time.Hour))
+	newer := makeProposal("review.new", time.Now())
+	if got, err := latestProposal(root); err != nil || got != newer {
+		t.Fatalf("latest: %q, %v", got, err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(newer), "proposal.review.txt"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := latestProposal(root); err != nil || got != older {
+		t.Fatalf("skip reviewed: %q, %v", got, err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(older), "proposal.review.txt"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := latestProposal(root); err == nil {
+		t.Fatal("all reviewed should fail")
+	}
+}
 
 func TestReview(t *testing.T) {
 	items, err := parse(strings.NewReader("変更する\n承認/コメント：\n\n変更しない\n承認/コメント：\n"))

@@ -4,8 +4,10 @@
 
 ```sh
 go install .
-prop-review proposal.txt
+prop-review
 ```
+
+リポジトリ内で `prop-review` を実行すると、リポジトリルートの `prop-review-tmp/review.*/proposal.txt` から最新の未レビュー提案を開きます。見つからなければエラーになります。パスを指定する従来の `prop-review proposal.txt` も使えます。Skill が新しい提案を作る際、同フォルダ内の以前の `review.*` ディレクトリ（結果を含む）は削除されます。必要な結果は事前に別の場所へ保存してください。
 
 `proposal.txt` は次の形式で作ります。承認欄は必ず空欄にしてください。
 

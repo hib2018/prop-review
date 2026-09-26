@@ -196,9 +196,50 @@ func render(items []item) string {
 	return b.String()
 }
 
+func latestProposal(root string) (string, error) {
+	paths, err := filepath.Glob(filepath.Join(root, "prop-review-tmp", "review.*", "proposal.txt"))
+	if err != nil {
+		return "", err
+	}
+	var latest string
+	var latestTime int64
+	for _, path := range paths {
+		if _, err := os.Stat(filepath.Join(filepath.Dir(path), "proposal.review.txt")); err == nil {
+			continue
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return "", err
+		}
+		if info.IsDir() {
+			continue
+		}
+		if time := info.ModTime().UnixNano(); latest == "" || time > latestTime || time == latestTime && path > latest {
+			latest, latestTime = path, time
+		}
+	}
+	if latest == "" {
+		return "", errors.New("no unreviewed proposal in prop-review-tmp")
+	}
+	return latest, nil
+}
+
 func run(args []string) error {
-	if len(args) < 1 || len(args) > 2 {
-		return errors.New("usage: prop-review proposal.txt [result.txt]")
+	if len(args) > 2 {
+		return errors.New("usage: prop-review [proposal.txt [result.txt]]")
+	}
+	if len(args) == 0 {
+		root, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+		if err != nil {
+			return fmt.Errorf("cannot find repository root: %w", err)
+		}
+		path, err := latestProposal(strings.TrimSpace(string(root)))
+		if err != nil {
+			return err
+		}
+		args = []string{path}
 	}
 	input, err := os.Open(args[0])
 	if err != nil {
@@ -209,6 +250,7 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	fmt.Fprintf(os.Stderr, "Reviewing: %s\n", args[0])
 	output := strings.TrimSuffix(args[0], filepath.Ext(args[0])) + ".review.txt"
 	if len(args) == 2 {
 		output = args[1]
