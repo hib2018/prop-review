@@ -12,9 +12,8 @@ func TestReview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	comment := func(r *bufio.Reader) (string, error) {
-		line, err := r.ReadString('\n')
-		return strings.TrimSpace(line), err
+	comment := func(r *bufio.Reader, multiline bool) (string, error) {
+		return readComment(r, io.Discard, multiline, nil)
 	}
 	// Approve, go back, reapprove, then comment on the next item.
 	if err := review(items, strings.NewReader("abacここは修正して\n"), io.Discard, comment); err != nil {
@@ -31,14 +30,14 @@ func TestCommentAndFullwidthKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	comment := func(r *bufio.Reader) (string, error) {
-		return readComment(r, io.Discard, func(r *bufio.Reader) (bool, error) {
+	comment := func(r *bufio.Reader, multiline bool) (string, error) {
+		return readComment(r, io.Discard, multiline, func(r *bufio.Reader) (bool, error) {
 			key, _, err := r.ReadRune()
 			return key == '\n', err
 		})
 	}
-	// Empty comment cancelled with Esc; then comment "承認" across two lines.
-	if err := review(items, strings.NewReader("ｃ\n\x1bc承認\n追記\n\nａ"), io.Discard, comment); err != nil {
+	// Empty comment cancelled with Esc; then a multiline comment "承認".
+	if err := review(items, strings.NewReader("ｃ\n\x1bm承認\n追記\n\nａ"), io.Discard, comment); err != nil {
 		t.Fatal(err)
 	}
 	want := "変更する\n承認/コメント：コメント：\"承認\\n追記\"\n\n変更しない\n承認/コメント：承認\n\n"
@@ -52,7 +51,7 @@ func TestNoImplicitApproval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	comment := func(*bufio.Reader) (string, error) { return "", nil }
+	comment := func(*bufio.Reader, bool) (string, error) { return "", nil }
 	if err := review(items, strings.NewReader("\n"), io.Discard, comment); err != nil {
 		t.Fatal(err)
 	}
@@ -76,15 +75,20 @@ func TestNoImplicitApproval(t *testing.T) {
 			t.Fatal("corrupted topic should be rejected")
 		}
 	}
-	answer, err := readComment(bufio.NewReader(strings.NewReader("文字化け�\n正常\n\n")), io.Discard, nil)
+	answer, err := readComment(bufio.NewReader(strings.NewReader("文字化け�\n正常\n")), io.Discard, false, nil)
 	if err != nil || answer != "正常" {
 		t.Fatalf("corrupted comment should be retried: %q, %v", answer, err)
 	}
-	answer, err = readComment(bufio.NewReader(strings.NewReader("\n\n")), io.Discard, func(r *bufio.Reader) (bool, error) {
+	answer, err = readComment(bufio.NewReader(strings.NewReader("\n\n")), io.Discard, false, func(r *bufio.Reader) (bool, error) {
 		key, _, err := r.ReadRune()
 		return key == '\n', err
 	})
 	if err != nil || answer != "" {
 		t.Fatalf("empty comment confirmation: %q, %v", answer, err)
+	}
+	var output strings.Builder
+	line, err := inputLine(bufio.NewReader(strings.NewReader("あい\bう\n")), &output, "コメント：")
+	if err != nil || line != "あう" || !strings.Contains(output.String(), "\r\x1b[2Kコメント：あ") {
+		t.Fatalf("Japanese deletion: %q, %v, %q", line, err, output.String())
 	}
 }

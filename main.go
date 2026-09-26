@@ -22,6 +22,7 @@ type item struct {
 }
 
 var errCommentBack = errors.New("comment cancelled")
+var errBadEncoding = errors.New("invalid UTF-8")
 
 func parse(r io.Reader) ([]item, error) {
 	var items []item
@@ -52,10 +53,10 @@ func parse(r io.Reader) ([]item, error) {
 	return items, nil
 }
 
-func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reader) (string, error)) error {
+func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reader, bool) (string, error)) error {
 	r := bufio.NewReader(in)
 	for i := 0; i < len(items); {
-		fmt.Fprintf(out, "\n[%d/%d] %s\na 承認   c コメント   Enter 未確認   b 戻る   q 中断\n> ", i+1, len(items), items[i].topic)
+		fmt.Fprintf(out, "\n[%d/%d] %s\na 承認   c コメント   m 複数行   Enter 未確認   b 戻る   q 中断\n> ", i+1, len(items), items[i].topic)
 		key, _, err := r.ReadRune()
 		if err != nil {
 			return fmt.Errorf("review interrupted: %w", err)
@@ -72,8 +73,8 @@ func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reade
 			items[i].answer = "承認"
 			items[i].comment = false
 			i++
-		case 'c':
-			answer, err := comment(r)
+		case 'c', 'm':
+			answer, err := comment(r, key == 'm')
 			if errors.Is(err, errCommentBack) {
 				continue
 			}
@@ -98,30 +99,65 @@ func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reade
 	return nil
 }
 
-func readComment(r *bufio.Reader, out io.Writer, confirm func(*bufio.Reader) (bool, error)) (string, error) {
-	var lines []string
+func inputLine(r *bufio.Reader, out io.Writer, prompt string) (string, error) {
+	fmt.Fprint(out, prompt)
+	var line string
+	badEncoding := false
 	for {
-		fmt.Fprint(out, "\nコメント（空行で終了）：")
-		line, err := r.ReadString('\n')
+		key, _, err := r.ReadRune()
 		if err != nil {
 			return "", err
 		}
-		line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
-		if !utf8.ValidString(line) || strings.ContainsRune(line, utf8.RuneError) {
+		switch key {
+		case '\r', '\n':
+			fmt.Fprint(out, "\n")
+			if badEncoding {
+				return "", errBadEncoding
+			}
+			return line, nil
+		case '\b', 127:
+			if line != "" {
+				_, size := utf8.DecodeLastRuneInString(line)
+				line = line[:len(line)-size]
+				fmt.Fprintf(out, "\r\x1b[2K%s%s", prompt, line)
+			}
+		case utf8.RuneError:
+			badEncoding = true
+		default:
+			if key >= ' ' && !badEncoding {
+				line += string(key)
+				fmt.Fprint(out, string(key))
+			}
+		}
+	}
+}
+
+func readComment(r *bufio.Reader, out io.Writer, multiline bool, confirm func(*bufio.Reader) (bool, error)) (string, error) {
+	var lines []string
+	for {
+		prompt := "\nコメント："
+		if multiline {
+			prompt = "\nコメント（空行で終了）："
+		}
+		line, err := inputLine(r, out, prompt)
+		if errors.Is(err, errBadEncoding) {
 			fmt.Fprint(out, "入力の文字コードを確認して、もう一度入力してください\n")
 			continue
 		}
-		if line == "" {
-			if len(lines) == 0 {
-				ok, err := confirm(r)
-				if err != nil {
-					return "", err
-				}
-				if !ok {
-					return "", errCommentBack
-				}
+		if err != nil {
+			return "", err
+		}
+		if line == "" && len(lines) == 0 {
+			ok, err := confirm(r)
+			if err != nil {
+				return "", err
 			}
-			return strings.Join(lines, "\n"), nil
+			if !ok {
+				return "", errCommentBack
+			}
+		}
+		if !multiline || line == "" {
+			return strings.Join(lines, "\n") + line, nil
 		}
 		lines = append(lines, line)
 	}
@@ -192,15 +228,9 @@ func run(args []string) error {
 		stty(tty, saved)
 		os.Exit(130)
 	}()
-	comment := func(r *bufio.Reader) (string, error) {
-		if _, err := stty(tty, saved); err != nil {
-			return "", err
-		}
-		answer, err := readComment(r, tty, func(r *bufio.Reader) (bool, error) {
-			if _, err := stty(tty, "-echo", "-icanon", "min", "1", "time", "0"); err != nil {
-				return false, err
-			}
-			fmt.Fprint(tty, "\n空コメントは未確認扱いになります。Enter=OK  Esc=戻る\n> ")
+	comment := func(r *bufio.Reader, multiline bool) (string, error) {
+		return readComment(r, tty, multiline, func(r *bufio.Reader) (bool, error) {
+			fmt.Fprint(tty, "空コメントは未確認扱いになります。Enter=OK  Esc=戻る\n> ")
 			for {
 				key, _, err := r.ReadRune()
 				if err != nil {
@@ -214,10 +244,6 @@ func run(args []string) error {
 				}
 			}
 		})
-		if _, restoreErr := stty(tty, "-echo", "-icanon", "min", "1", "time", "0"); err == nil {
-			err = restoreErr
-		}
-		return answer, err
 	}
 	if err := review(items, tty, tty, comment); err != nil {
 		return err
