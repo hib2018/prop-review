@@ -9,14 +9,19 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
+	"unicode/utf8"
 )
 
 type item struct {
-	topic  string
-	answer string
+	topic   string
+	answer  string
+	comment bool
 }
+
+var errCommentBack = errors.New("comment cancelled")
 
 func parse(r io.Reader) ([]item, error) {
 	var items []item
@@ -27,10 +32,13 @@ func parse(r io.Reader) ([]item, error) {
 			continue
 		}
 		topic := strings.TrimSpace(strings.TrimPrefix(line, "何について："))
+		if !utf8.ValidString(topic) || strings.ContainsRune(topic, utf8.RuneError) {
+			return nil, errors.New("invalid UTF-8 in proposal")
+		}
 		if topic == "" {
 			return nil, errors.New("empty topic")
 		}
-		if !s.Scan() || strings.TrimSpace(s.Text()) != "承認/コメント：" {
+		if !s.Scan() || (strings.TrimSpace(s.Text()) != "承認/コメント：" && strings.TrimSpace(s.Text()) != "承認/コメント:") {
 			return nil, fmt.Errorf("%q: expected empty 承認/コメント： line", topic)
 		}
 		items = append(items, item{topic: topic})
@@ -48,23 +56,36 @@ func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reade
 	r := bufio.NewReader(in)
 	for i := 0; i < len(items); {
 		fmt.Fprintf(out, "\n[%d/%d] %s\na 承認   c コメント   Enter 未確認   b 戻る   q 中断\n> ", i+1, len(items), items[i].topic)
-		key, err := r.ReadByte()
+		key, _, err := r.ReadRune()
 		if err != nil {
 			return fmt.Errorf("review interrupted: %w", err)
+		}
+		if key == utf8.RuneError {
+			fmt.Fprint(out, "\n入力の文字コードを確認してください\n")
+			continue
+		}
+		if key >= 'ａ' && key <= 'ｚ' {
+			key -= 'ａ' - 'a'
 		}
 		switch key {
 		case 'a':
 			items[i].answer = "承認"
+			items[i].comment = false
 			i++
 		case 'c':
 			answer, err := comment(r)
+			if errors.Is(err, errCommentBack) {
+				continue
+			}
 			if err != nil {
 				return fmt.Errorf("review interrupted: %w", err)
 			}
 			items[i].answer = answer
+			items[i].comment = answer != ""
 			i++
 		case '\r', '\n':
 			items[i].answer = ""
+			items[i].comment = false
 			i++
 		case 'b':
 			if i > 0 {
@@ -75,6 +96,35 @@ func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reade
 		}
 	}
 	return nil
+}
+
+func readComment(r *bufio.Reader, out io.Writer, confirm func(*bufio.Reader) (bool, error)) (string, error) {
+	var lines []string
+	for {
+		fmt.Fprint(out, "\nコメント（空行で終了）：")
+		line, err := r.ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+		line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+		if !utf8.ValidString(line) || strings.ContainsRune(line, utf8.RuneError) {
+			fmt.Fprint(out, "入力の文字コードを確認して、もう一度入力してください\n")
+			continue
+		}
+		if line == "" {
+			if len(lines) == 0 {
+				ok, err := confirm(r)
+				if err != nil {
+					return "", err
+				}
+				if !ok {
+					return "", errCommentBack
+				}
+			}
+			return strings.Join(lines, "\n"), nil
+		}
+		lines = append(lines, line)
+	}
 }
 
 func stty(tty *os.File, args ...string) (string, error) {
@@ -90,7 +140,11 @@ func stty(tty *os.File, args ...string) (string, error) {
 func render(items []item) string {
 	var b strings.Builder
 	for _, item := range items {
-		fmt.Fprintf(&b, "%s\n承認/コメント：%s\n\n", item.topic, item.answer)
+		answer := item.answer
+		if item.comment {
+			answer = "コメント：" + strconv.Quote(answer)
+		}
+		fmt.Fprintf(&b, "%s\n承認/コメント：%s\n\n", item.topic, answer)
 	}
 	return b.String()
 }
@@ -142,15 +196,28 @@ func run(args []string) error {
 		if _, err := stty(tty, saved); err != nil {
 			return "", err
 		}
-		fmt.Fprint(tty, "\nコメント：")
-		line, err := r.ReadString('\n')
-		if err != nil {
-			return "", err
+		answer, err := readComment(r, tty, func(r *bufio.Reader) (bool, error) {
+			if _, err := stty(tty, "-echo", "-icanon", "min", "1", "time", "0"); err != nil {
+				return false, err
+			}
+			fmt.Fprint(tty, "\n空コメントは未確認扱いになります。Enter=OK  Esc=戻る\n> ")
+			for {
+				key, _, err := r.ReadRune()
+				if err != nil {
+					return false, err
+				}
+				switch key {
+				case '\r', '\n':
+					return true, nil
+				case '\x1b':
+					return false, nil
+				}
+			}
+		})
+		if _, restoreErr := stty(tty, "-echo", "-icanon", "min", "1", "time", "0"); err == nil {
+			err = restoreErr
 		}
-		if _, err := stty(tty, "-echo", "-icanon", "min", "1", "time", "0"); err != nil {
-			return "", err
-		}
-		return strings.TrimSpace(line), nil
+		return answer, err
 	}
 	if err := review(items, tty, tty, comment); err != nil {
 		return err
