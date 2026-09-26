@@ -1,13 +1,13 @@
 ---
 name: prop-review
-description: Turn a human's rough idea ("こういうのを考えてる") into a short list of individually reviewable proposals, then collect per-item approval or comments with prop-review. Use when the human asks to start a lightweight proposal/comment session. Not for zintent approval, Spec Kit definitions, or automatic implementation.
+description: Turn a rough idea or a request to identify a project's issues and future direction into a short list of individually reviewable proposals in proposal.txt, then collect per-item approval or comments with prop-review. Use for lightweight proposal/comment sessions and issue-and-direction reviews. Not for zintent approval, Spec Kit definitions, or automatic implementation.
 ---
 
 # prop-review: idea to proposal
 
-Start from the human's own words, in their language. This is a lightweight discussion, not an approval gate for a whole project.
+Start from the human's own words, in their language. This is a lightweight discussion, not an approval gate for a whole project. A request such as "このツールの課題点と将来の方針を洗い出して" also calls for a reviewable proposal file, not just a report.
 
-1. If the idea lacks the minimum context to propose anything concrete, ask one short question. Otherwise write 1–5 independently reviewable items. Make assumptions explicit in the item; do not invent requirements or silently expand scope.
+1. If the request lacks the minimum context to propose anything concrete, ask one short question. Otherwise write 1–5 independently reviewable items. For issue-and-direction requests, inspect the relevant project first and turn each concrete issue or future direction into a separate proposed response; distinguish confirmed issues from possible improvements. Make assumptions explicit in the item; do not invent requirements or silently expand scope.
 2. Create a temporary directory with `mktemp -d` and write `proposal.txt` there in exactly this format (blank approval lines, no other headings):
 
    ```text
