@@ -54,12 +54,12 @@ func parse(r io.Reader) ([]item, error) {
 	return items, nil
 }
 
-func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reader, bool) (string, error)) error {
+func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reader) (string, error)) error {
 	r := bufio.NewReader(in)
 	showPrompt := true
 	for i := 0; i < len(items); {
 		if showPrompt {
-			fmt.Fprintf(out, "\n[%d/%d] %s\na 承認   c コメント   m 複数行   Enter 未確認   b 戻る   q 中断\n> ", i+1, len(items), items[i].topic)
+			fmt.Fprintf(out, "\n[%d/%d] %s\na 承認   c コメント   Enter 未確認   b 戻る   q 中断\n> ", i+1, len(items), items[i].topic)
 			showPrompt = false
 		}
 		key, _, err := r.ReadRune()
@@ -80,8 +80,8 @@ func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reade
 			items[i].comment = false
 			i++
 			showPrompt = true
-		case 'c', 'm':
-			answer, err := comment(r, key == 'm')
+		case 'c':
+			answer, err := comment(r)
 			if errors.Is(err, errCommentBack) {
 				showPrompt = true
 				continue
@@ -151,14 +151,9 @@ func inputLine(r *bufio.Reader, out io.Writer, prompt string) (string, error) {
 	}
 }
 
-func readComment(r *bufio.Reader, out io.Writer, multiline bool, confirm func(*bufio.Reader) (bool, error)) (string, error) {
-	var lines []string
+func readComment(r *bufio.Reader, out io.Writer, confirm func(*bufio.Reader) (bool, error)) (string, error) {
 	for {
-		prompt := "\nコメント："
-		if multiline {
-			prompt = "\nコメント（空行で終了）："
-		}
-		line, err := inputLine(r, out, prompt)
+		line, err := inputLine(r, out, "\nコメント：")
 		if errors.Is(err, errBadEncoding) {
 			fmt.Fprint(out, "入力の文字コードを確認して、もう一度入力してください\n")
 			continue
@@ -166,7 +161,7 @@ func readComment(r *bufio.Reader, out io.Writer, multiline bool, confirm func(*b
 		if err != nil {
 			return "", err
 		}
-		if line == "" && len(lines) == 0 {
+		if line == "" {
 			ok, err := confirm(r)
 			if err != nil {
 				return "", err
@@ -175,10 +170,7 @@ func readComment(r *bufio.Reader, out io.Writer, multiline bool, confirm func(*b
 				return "", errCommentBack
 			}
 		}
-		if !multiline || line == "" {
-			return strings.Join(lines, "\n") + line, nil
-		}
-		lines = append(lines, line)
+		return line, nil
 	}
 }
 
@@ -247,8 +239,8 @@ func run(args []string) error {
 		stty(tty, saved)
 		os.Exit(130)
 	}()
-	comment := func(r *bufio.Reader, multiline bool) (string, error) {
-		return readComment(r, tty, multiline, func(r *bufio.Reader) (bool, error) {
+	comment := func(r *bufio.Reader) (string, error) {
+		return readComment(r, tty, func(r *bufio.Reader) (bool, error) {
 			fmt.Fprint(tty, "空コメントは未確認扱いになります。Enter=OK  Esc=戻る\n> ")
 			for {
 				key, _, err := r.ReadRune()
