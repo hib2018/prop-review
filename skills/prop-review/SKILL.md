@@ -1,13 +1,13 @@
 ---
 name: prop-review
-description: Turn a rough idea or a request to identify a project's issues and future direction into a short list of individually reviewable proposals in proposal.txt, then collect per-item approval or comments with prop-review. Use for lightweight proposal/comment sessions and issue-and-direction reviews. Not for zintent approval, Spec Kit definitions, or automatic implementation.
+description: Create a proposal.txt of individually reviewable options or next steps from an initial idea, a direction-setting request, or any other topic the human wants to discuss and review item by item; then collect approval or comments with prop-review. Use when the human asks for idea generation, direction or issue analysis with possible next steps, proposals, options, a lightweight review, or invokes prop-review. Not for ordinary information-only answers, zintent approval, Spec Kit definitions, or automatic implementation.
 ---
 
-# prop-review: idea to proposal
+# prop-review: request to reviewable proposals
 
-Start from the human's own words, in their language. This is a lightweight discussion, not an approval gate for a whole project. A request such as "このツールの課題点と将来の方針を洗い出して" also calls for a reviewable proposal file, not just a report.
+Start from the human's own words, in their language. This is a lightweight discussion, not an approval gate for a whole project. Use it for early ideas and direction-setting, but also for other requests when the human wants to review possible choices or next steps. Do not turn a request for facts only or direct implementation into an approval session without being asked.
 
-1. If the request lacks the minimum context to propose anything concrete, ask one short question. Otherwise write 1–5 independently reviewable items. For issue-and-direction requests, inspect the relevant project first and turn each concrete issue or future direction into a separate proposed response; distinguish confirmed issues from possible improvements. Make assumptions explicit in the item; do not invent requirements or silently expand scope.
+1. If the request lacks the minimum context to propose anything concrete, ask one short question. Otherwise write 1–5 small, independently reviewable items. Inspect the relevant project when proposals depend on its actual state. Convert findings into specific proposed responses rather than asking the human to approve a fact; distinguish confirmed problems from optional improvements. Make assumptions explicit in each item; do not invent requirements or silently expand scope.
 2. Create a temporary directory with `mktemp -d` and write `proposal.txt` there in exactly this format (blank approval lines, no other headings):
 
    ```text
