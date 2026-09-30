@@ -227,8 +227,11 @@ func latestProposal(root string) (string, error) {
 }
 
 func run(args []string) error {
+	if len(args) > 0 && args[0] == "revise" {
+		return runRevise(args[1:])
+	}
 	if len(args) > 2 {
-		return errors.New("usage: prop-review [proposal.txt [result.txt]]")
+		return errors.New("usage: prop-review [proposal.txt [result.txt]] | revise [--model MODEL] [proposal.review.txt]")
 	}
 	if len(args) == 0 {
 		root, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()

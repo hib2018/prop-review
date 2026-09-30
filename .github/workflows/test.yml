@@ -1,0 +1,29 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Format, test, and vet
+        run: |
+          gofmt -w *.go
+          go test -race ./...
+          go vet ./...
+      - name: Upload formatted sources
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: formatted-go
+          path: '*.go'
