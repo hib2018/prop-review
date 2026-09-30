@@ -16,14 +16,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - name: Format, test, and vet
+      - name: Check formatting, test, and vet
         run: |
           gofmt -w *.go
+          git diff --exit-code -- '*.go'
           go test -race ./...
           go vet ./...
-      - name: Upload formatted sources
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: formatted-go
-          path: '*.go'
+      - name: Build for macOS
+        run: GOOS=darwin GOARCH=arm64 go build -o "$RUNNER_TEMP/prop-review-darwin"

@@ -137,15 +137,15 @@ func revisedItems(envelope []byte, source []item) ([]item, error) {
 	}
 	var outer struct {
 		FinalOutput string          `json:"final_output"`
-		SessionID   string          `json:"session_id"`
-		ExitCode    int             `json:"exit_code"`
+		SessionID   *string         `json:"session_id"`
+		ExitCode    *int            `json:"exit_code"`
 		Interrupted bool            `json:"interrupted"`
 		Error       json.RawMessage `json:"error"`
 	}
 	if err := json.Unmarshal(envelope, &outer); err != nil {
 		return nil, fmt.Errorf("invalid fx JSON envelope: %w", err)
 	}
-	if outer.ExitCode != 0 || outer.Interrupted || outer.SessionID != "" || len(outer.Error) > 0 && string(outer.Error) != "null" {
+	if outer.ExitCode == nil || outer.SessionID == nil || *outer.ExitCode != 0 || outer.Interrupted || *outer.SessionID != "" || len(outer.Error) > 0 && string(outer.Error) != "null" {
 		return nil, errors.New("fx did not complete a non-persistent turn successfully")
 	}
 	var output struct {

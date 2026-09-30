@@ -79,6 +79,8 @@ func TestRevisionPromptAndValidation(t *testing.T) {
 		`{"final_output":"{}","session_id":"","exit_code":1}`,
 		`{"final_output":"{}","session_id":"","error":"provider failed"}`,
 		`{"final_output":"{}","session_id":"","interrupted":true}`,
+		`{"final_output":"{}","exit_code":0}`,
+		`{"final_output":"{}","session_id":""}`,
 		`not json`,
 	} {
 		if _, err := revisedItems([]byte(bad), source); err == nil {
