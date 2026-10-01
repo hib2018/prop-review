@@ -4,11 +4,84 @@ import (
 	"bufio"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestFXAndRevision(t *testing.T) {
+	root := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", root).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %s: %v", out, err)
+	}
+	bin := t.TempDir()
+	fx := filepath.Join(bin, "fx")
+	if err := os.WriteFile(fx, []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" > \"$FX_ARGS\"\nprintf '%s\\n' \"$FX_OUTPUT\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	argsPath := filepath.Join(bin, "args")
+	t.Setenv("FX_ARGS", argsPath)
+	t.Setenv("FX_OUTPUT", `["改訂案"]`)
+	items, err := fxProposals(root, "prompt")
+	if err != nil || len(items) != 1 || items[0].topic != "改訂案" {
+		t.Fatalf("fx: %v, %v", items, err)
+	}
+	for _, bad := range []string{`[]`, `["bad\nline"]`, `["承認", ""]`, `not-json`, `["文字化け�"]`} {
+		t.Setenv("FX_OUTPUT", bad)
+		if _, err := fxProposals(root, "prompt"); err == nil {
+			t.Fatalf("accepted %q", bad)
+		}
+	}
+	t.Setenv("FX_OUTPUT", `["改訂案"]`)
+	original := []item{{topic: "承認案"}, {topic: "コメント案"}, {topic: "保留案"}}
+	path, err := saveProposal(root, original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := []item{{topic: "承認案", answer: "承認"}, {topic: "コメント案", answer: "直して", comment: true}, {topic: "保留案"}}
+	resultPath := filepath.Join(filepath.Dir(path), "proposal.review.txt")
+	if err := os.WriteFile(resultPath, []byte(render(result)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(cwd)
+	if err := generate(true); err != nil {
+		t.Fatal(err)
+	}
+	newPath, err := latestProposal(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(newPath)
+	if err != nil || string(data) != "改訂案\n承認/コメント：\n\n保留案\n承認/コメント：\n\n" {
+		t.Fatalf("revision: %q, %v", data, err)
+	}
+	if _, err := os.Stat(resultPath); err != nil {
+		t.Fatalf("original result lost: %v", err)
+	}
+	args, err := os.ReadFile(argsPath)
+	if err != nil || !strings.Contains(string(args), `"topic":"コメント案","comment":"直して"`) {
+		t.Fatalf("fx did not receive feedback: %s, %v", args, err)
+	}
+	countBefore, _ := filepath.Glob(filepath.Join(root, "prop-review-tmp", "review.*"))
+	t.Setenv("FX_OUTPUT", `not-json`)
+	if err := generate(true); err == nil {
+		t.Fatal("bad fx output should fail")
+	}
+	countAfter, _ := filepath.Glob(filepath.Join(root, "prop-review-tmp", "review.*"))
+	if len(countBefore) != len(countAfter) {
+		t.Fatal("failed generation created a proposal")
+	}
+	if out, err := exec.Command("git", "check-ignore", filepath.Join(root, "prop-review-tmp", "probe")).CombinedOutput(); err != nil {
+		t.Fatalf("not ignored: %s: %v", out, err)
+	}
+}
 
 func TestLatestProposal(t *testing.T) {
 	root := t.TempDir()
