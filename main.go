@@ -227,18 +227,82 @@ func latestProposal(root string) (string, error) {
 	return latest, nil
 }
 
+func enginePath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "prop-review", "engine"), nil
+}
+
+func selectedEngine() (string, error) {
+	path, err := enginePath()
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "fx", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	engine := strings.TrimSpace(string(data))
+	if engine != "fx" && engine != "pi" {
+		return "", fmt.Errorf("invalid engine setting: %s", path)
+	}
+	return engine, nil
+}
+
+func setEngine(engine string) error {
+	if engine != "fx" && engine != "pi" {
+		return errors.New("usage: prop-review --engine fx|pi")
+	}
+	path, err := enginePath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), ".engine-")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if err := f.Chmod(0600); err != nil {
+		f.Close()
+		return err
+	}
+	if _, err := io.WriteString(f, engine+"\n"); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
+}
+
 func run(args []string) error {
+	if len(args) > 0 && args[0] == "--engine" {
+		if len(args) != 2 {
+			return errors.New("usage: prop-review --engine fx|pi")
+		}
+		return setEngine(args[1])
+	}
 	if len(args) > 0 && (args[0] == "generate" || args[0] == "revise") {
-		engine := "fx"
-		if len(args) == 3 && args[1] == "--engine" && (args[2] == "fx" || args[2] == "pi") {
-			engine = args[2]
-		} else if len(args) != 1 {
-			return errors.New("usage: prop-review generate|revise [--engine fx|pi]")
+		if len(args) != 1 {
+			return errors.New("usage: prop-review generate|revise")
+		}
+		engine, err := selectedEngine()
+		if err != nil {
+			return err
 		}
 		return generate(args[0] == "revise", engine)
 	}
 	if len(args) > 2 {
-		return errors.New("usage: prop-review [generate|revise|proposal.txt [result.txt]]")
+		return errors.New("usage: prop-review [--engine fx|pi|generate|revise|proposal.txt [result.txt]]")
 	}
 	if len(args) == 0 {
 		root, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()

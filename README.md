@@ -53,15 +53,17 @@ prop-review
 
 ## 提案生成・改訂（fx / Pi）
 
-`fx` または `pi` CLI をインストール・認証し、使用する CLI 側でモデルを設定してから、リポジトリ内の端末で実行します。既定は fx です。libfx やモデル API は使いません。
+`fx` または `pi` CLI をインストール・認証し、使用する CLI 側でモデルを設定します。生成エンジンは全リポジトリ共通のユーザー設定です（未設定時は fx）。`prop-review --engine pi|fx` で切り替えます。libfx やモデル API は使いません。
 
 ```sh
-prop-review generate                # fx で提案 → 自動レビュー
-prop-review generate --engine pi    # Pi で提案 → 自動レビュー
-prop-review revise --engine pi      # Pi でコメントを改訂 → 新規 proposal.txt のみ保存
-prop-review revise                 # fx でコメントを改訂
-prop-review                        # 改訂案を再レビュー
+prop-review --engine pi  # 以後は Pi を使用
+prop-review generate     # 「依頼：」を入力 → 提案 → 自動レビュー
+prop-review revise       # コメントを改訂 → 新規 proposal.txt のみ保存
+prop-review              # 改訂案を再レビュー
+prop-review --engine fx  # 以後は fx を使用
 ```
+
+設定は OS のユーザー設定ディレクトリ（`os.UserConfigDir()`）内の `prop-review/engine` に保存します。`generate` / `revise` はリポジトリ内の端末で実行します。
 
 両 CLI にはリポジトリの読み取りと提案だけを指示し、実装・ファイル変更は指示しません。Pi は一時セッションの print モードで起動し、拡張・Skill を無効にして読み取り専用ツールだけを渡します。返答は JSON の提案 1〜10 件として検証し（内容に応じて10件程度、無理に水増ししません）、従来の空欄付き `proposal.txt` に変換します。改訂はコメントのある項目だけを置き換え、未確認項目は維持し、承認済み項目は元の提案・結果に残します。改訂後にレビューは自動で開きません。選択した CLI が失敗・不正な出力を返した場合や入力をキャンセルした場合、レビューは開始せず、以前のファイルは維持します。標準の `proposal.review.txt` がないレビュー（保存先を明示したレビュー）は `revise` の対象外です。
 

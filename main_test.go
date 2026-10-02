@@ -12,6 +12,12 @@ import (
 )
 
 func TestFXAndRevision(t *testing.T) {
+	config := t.TempDir()
+	t.Setenv("HOME", config)
+	t.Setenv("XDG_CONFIG_HOME", config)
+	if err := run([]string{"--engine", "fx"}); err != nil {
+		t.Fatal(err)
+	}
 	root := t.TempDir()
 	if out, err := exec.Command("git", "init", "-q", root).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %s: %v", out, err)
@@ -55,7 +61,7 @@ func TestFXAndRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Chdir(cwd)
-	if err := generate(true, "fx"); err != nil {
+	if err := run([]string{"revise"}); err != nil {
 		t.Fatal(err)
 	}
 	newPath, err := latestProposal(root)
@@ -88,6 +94,18 @@ func TestFXAndRevision(t *testing.T) {
 }
 
 func TestPiEngine(t *testing.T) {
+	config := t.TempDir()
+	t.Setenv("HOME", config)
+	t.Setenv("XDG_CONFIG_HOME", config)
+	if got, err := selectedEngine(); err != nil || got != "fx" {
+		t.Fatalf("default engine: %q, %v", got, err)
+	}
+	if err := run([]string{"--engine", "pi"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := selectedEngine(); err != nil || got != "pi" {
+		t.Fatalf("saved engine: %q, %v", got, err)
+	}
 	root := t.TempDir()
 	bin := t.TempDir()
 	argsPath := filepath.Join(bin, "args")
@@ -98,7 +116,11 @@ func TestPiEngine(t *testing.T) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("PI_ARGS", argsPath)
 	t.Setenv("PI_OUTPUT", `["Pi案"]`)
-	items, err := proposals(root, "prompt", "pi")
+	engine, err := selectedEngine()
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := proposals(root, "prompt", engine)
 	if err != nil || len(items) != 1 || items[0].topic != "Pi案" {
 		t.Fatalf("pi: %v, %v", items, err)
 	}
@@ -110,11 +132,32 @@ func TestPiEngine(t *testing.T) {
 	if _, err := proposals(root, "prompt", "pi"); err == nil {
 		t.Fatal("bad pi output should fail")
 	}
-	for _, args := range [][]string{{"generate", "--engine", "other"}, {"revise", "--engine"}, {"generate", "extra"}} {
+	for _, args := range [][]string{{"--engine", "other"}, {"--engine"}, {"generate", "--engine", "fx"}, {"revise", "--engine", "pi"}} {
 		if err := run(args); err == nil {
 			t.Fatalf("accepted args %v", args)
 		}
 	}
+	if err := run([]string{"--engine", "fx"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := selectedEngine(); err != nil || got != "fx" {
+		t.Fatalf("switched back: %q, %v", got, err)
+	}
+	if err := os.WriteFile(mustEnginePath(t), []byte("invalid\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := selectedEngine(); err == nil {
+		t.Fatal("invalid config should fail")
+	}
+}
+
+func mustEnginePath(t *testing.T) string {
+	t.Helper()
+	path, err := enginePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 func TestLatestProposal(t *testing.T) {
