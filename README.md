@@ -9,18 +9,22 @@
 ```sh
 mkdir -p "$HOME/.local/bin" "$HOME/.pi/agent/skills"
 GOBIN="$HOME/.local/bin" go install .
-if [ ! -e "$HOME/.pi/agent/skills/prop-review" ] && [ ! -L "$HOME/.pi/agent/skills/prop-review" ]; then
-  ln -s "$PWD/skills/prop-review" "$HOME/.pi/agent/skills/prop-review"
-fi
+for skill in prop-review prop-review-ingest; do
+  if [ ! -e "$HOME/.pi/agent/skills/$skill" ] && [ ! -L "$HOME/.pi/agent/skills/$skill" ]; then
+    ln -s "$PWD/skills/$skill" "$HOME/.pi/agent/skills/$skill"
+  fi
+done
 ```
 
 Pi 以外で Agent Skills のユーザー共通ディレクトリ `~/.agents/skills` に対応するツールを使う場合は、こちらにもリンクします。
 
 ```sh
 mkdir -p "$HOME/.agents/skills"
-if [ ! -e "$HOME/.agents/skills/prop-review" ] && [ ! -L "$HOME/.agents/skills/prop-review" ]; then
-  ln -s "$PWD/skills/prop-review" "$HOME/.agents/skills/prop-review"
-fi
+for skill in prop-review prop-review-ingest; do
+  if [ ! -e "$HOME/.agents/skills/$skill" ] && [ ! -L "$HOME/.agents/skills/$skill" ]; then
+    ln -s "$PWD/skills/$skill" "$HOME/.agents/skills/$skill"
+  fi
+done
 ```
 
 既に Skill の配置先がある場合は上書きしません。リンク先を確認してください。Pi を起動中なら `/reload` で Skill を再読み込みします。ツール固有の Skill ディレクトリを使う場合は、そのディレクトリに同様にリンクしてください。
@@ -59,4 +63,4 @@ prop-review           # 改訂案を再レビュー
 
 fx にはリポジトリの読み取りと提案だけを指示し、実装・ファイル変更は指示しません。返答は JSON の提案 1〜5 件として検証し、従来の空欄付き `proposal.txt` に変換します。改訂はコメントのある項目だけを置き換え、未確認項目は維持し、承認済み項目は元の提案・結果に残します。改訂後にレビューは自動で開きません。fx が失敗・不正な出力を返した場合や入力をキャンセルした場合、レビューは開始せず、以前のファイルは維持します。標準の `proposal.review.txt` がないレビュー（保存先を明示したレビュー）は `revise` の対象外です。
 
-承認はその項目への意思表示だけです。実装や作業の開始は自動化しません。
+チャットでレビュー結果を読み込むときは `prop-review-ingest` Skill を使います。生成・レビューへの案内は `prop-review` Skill が担当し、結果の取り込みは行いません。承認はその項目への意思表示だけです。実装や作業の開始は自動化しません。
