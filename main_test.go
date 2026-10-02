@@ -29,7 +29,11 @@ func TestFXAndRevision(t *testing.T) {
 	if err != nil || len(items) != 1 || items[0].topic != "改訂案" {
 		t.Fatalf("fx: %v, %v", items, err)
 	}
-	for _, bad := range []string{`[]`, `["bad\nline"]`, `["承認", ""]`, `not-json`, `["文字化け�"]`} {
+	t.Setenv("FX_OUTPUT", `[`+strings.Repeat(`"提案",`, 9)+`"提案"]`)
+	if items, err := fxProposals(root, "prompt"); err != nil || len(items) != 10 {
+		t.Fatalf("10 proposals should be valid: %d, %v", len(items), err)
+	}
+	for _, bad := range []string{`[]`, `[` + strings.Repeat(`"提案",`, 10) + `"提案"]`, `["bad\nline"]`, `["承認", ""]`, `not-json`, `["文字化け�"]`} {
 		t.Setenv("FX_OUTPUT", bad)
 		if _, err := fxProposals(root, "prompt"); err == nil {
 			t.Fatalf("accepted %q", bad)
