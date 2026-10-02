@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -169,6 +171,23 @@ func mustEnginePath(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestEngineTimeout(t *testing.T) {
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "fx"), []byte("#!/bin/sh\nexec sleep 3\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	var progress strings.Builder
+	start := time.Now()
+	items, err := proposalsWithTimeout(t.TempDir(), "prompt", "fx", 1200*time.Millisecond, &progress)
+	if err == nil || !strings.Contains(err.Error(), "timed out") || !errors.Is(err, context.DeadlineExceeded) || len(items) != 0 {
+		t.Fatalf("timeout: %v, %v", items, err)
+	}
+	if time.Since(start) > 2500*time.Millisecond || !strings.Contains(progress.String(), "1s") {
+		t.Fatalf("elapsed: %s, progress: %q", time.Since(start), progress.String())
+	}
 }
 
 func TestLatestProposal(t *testing.T) {
