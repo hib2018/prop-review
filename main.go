@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -392,19 +393,27 @@ func run(args []string) error {
 	return nil
 }
 
+//go:embed pi_sdk.mjs
+var piSDK string
+
 // Engines return only a JSON array of proposal strings; never trust it as a proposal file.
 func proposals(root, prompt, engine string) ([]item, error) {
 	var cmd *exec.Cmd
 	switch engine {
 	case "fx":
 		cmd = exec.Command("fx", "ask", "--no-save", "--", prompt)
+		cmd.Stdin = strings.NewReader("")
 	case "pi":
-		cmd = exec.Command("pi", "--print", "--no-session", "--no-extensions", "--no-skills", "--no-prompt-templates", "--tools", "read,grep,find,ls", "--", prompt)
+		modules, err := exec.Command("npm", "root", "-g").Output()
+		if err != nil {
+			return nil, fmt.Errorf("locate Pi SDK (npm root -g): %w", err)
+		}
+		cmd = exec.Command("node", "--input-type=module", "-e", piSDK, strings.TrimSpace(string(modules)))
+		cmd.Stdin = strings.NewReader(prompt)
 	default:
 		return nil, fmt.Errorf("unknown engine: %s", engine)
 	}
 	cmd.Dir = root
-	cmd.Stdin = strings.NewReader("")
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()

@@ -109,12 +109,19 @@ func TestPiEngine(t *testing.T) {
 	root := t.TempDir()
 	bin := t.TempDir()
 	argsPath := filepath.Join(bin, "args")
-	pi := filepath.Join(bin, "pi")
-	if err := os.WriteFile(pi, []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" > \"$PI_ARGS\"\nprintf '%s\\n' \"$PI_OUTPUT\"\n"), 0700); err != nil {
-		t.Fatal(err)
+	for name, script := range map[string]string{
+		"npm":  "#!/bin/sh\nprintf '/fake/global/node_modules\\n'\n",
+		"node": "#!/bin/sh\nprintf '%s\\n' \"$1\" \"$2\" \"$4\" > \"$NODE_ARGS\"\ncat > \"$NODE_STDIN\"\nprintf '%s\\n' \"$PI_OUTPUT\"\n",
+		"pi":   "#!/bin/sh\nexit 99\n",
+	} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0700); err != nil {
+			t.Fatal(err)
+		}
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("PI_ARGS", argsPath)
+	t.Setenv("NODE_ARGS", argsPath)
+	stdinPath := filepath.Join(bin, "stdin")
+	t.Setenv("NODE_STDIN", stdinPath)
 	t.Setenv("PI_OUTPUT", `["Pi案"]`)
 	engine, err := selectedEngine()
 	if err != nil {
@@ -125,8 +132,12 @@ func TestPiEngine(t *testing.T) {
 		t.Fatalf("pi: %v, %v", items, err)
 	}
 	args, err := os.ReadFile(argsPath)
-	if err != nil || !strings.Contains(string(args), "--print --no-session --no-extensions --no-skills --no-prompt-templates --tools read,grep,find,ls -- prompt") {
-		t.Fatalf("pi args: %q, %v", args, err)
+	if err != nil || !strings.Contains(string(args), "--input-type=module\n-e\n/fake/global/node_modules") {
+		t.Fatalf("node args: %q, %v", args, err)
+	}
+	stdin, err := os.ReadFile(stdinPath)
+	if err != nil || string(stdin) != "prompt" {
+		t.Fatalf("node stdin: %q, %v", stdin, err)
 	}
 	t.Setenv("PI_OUTPUT", "not-json")
 	if _, err := proposals(root, "prompt", "pi"); err == nil {
