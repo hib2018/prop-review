@@ -25,17 +25,17 @@ func TestFXAndRevision(t *testing.T) {
 	argsPath := filepath.Join(bin, "args")
 	t.Setenv("FX_ARGS", argsPath)
 	t.Setenv("FX_OUTPUT", `["改訂案"]`)
-	items, err := fxProposals(root, "prompt")
+	items, err := proposals(root, "prompt", "fx")
 	if err != nil || len(items) != 1 || items[0].topic != "改訂案" {
 		t.Fatalf("fx: %v, %v", items, err)
 	}
 	t.Setenv("FX_OUTPUT", `[`+strings.Repeat(`"提案",`, 9)+`"提案"]`)
-	if items, err := fxProposals(root, "prompt"); err != nil || len(items) != 10 {
+	if items, err := proposals(root, "prompt", "fx"); err != nil || len(items) != 10 {
 		t.Fatalf("10 proposals should be valid: %d, %v", len(items), err)
 	}
 	for _, bad := range []string{`[]`, `[` + strings.Repeat(`"提案",`, 10) + `"提案"]`, `["bad\nline"]`, `["承認", ""]`, `not-json`, `["文字化け�"]`} {
 		t.Setenv("FX_OUTPUT", bad)
-		if _, err := fxProposals(root, "prompt"); err == nil {
+		if _, err := proposals(root, "prompt", "fx"); err == nil {
 			t.Fatalf("accepted %q", bad)
 		}
 	}
@@ -55,7 +55,7 @@ func TestFXAndRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Chdir(cwd)
-	if err := generate(true); err != nil {
+	if err := generate(true, "fx"); err != nil {
 		t.Fatal(err)
 	}
 	newPath, err := latestProposal(root)
@@ -75,7 +75,7 @@ func TestFXAndRevision(t *testing.T) {
 	}
 	countBefore, _ := filepath.Glob(filepath.Join(root, "prop-review-tmp", "review.*"))
 	t.Setenv("FX_OUTPUT", `not-json`)
-	if err := generate(true); err == nil {
+	if err := generate(true, "fx"); err == nil {
 		t.Fatal("bad fx output should fail")
 	}
 	countAfter, _ := filepath.Glob(filepath.Join(root, "prop-review-tmp", "review.*"))
@@ -84,6 +84,36 @@ func TestFXAndRevision(t *testing.T) {
 	}
 	if out, err := exec.Command("git", "check-ignore", filepath.Join(root, "prop-review-tmp", "probe")).CombinedOutput(); err != nil {
 		t.Fatalf("not ignored: %s: %v", out, err)
+	}
+}
+
+func TestPiEngine(t *testing.T) {
+	root := t.TempDir()
+	bin := t.TempDir()
+	argsPath := filepath.Join(bin, "args")
+	pi := filepath.Join(bin, "pi")
+	if err := os.WriteFile(pi, []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" > \"$PI_ARGS\"\nprintf '%s\\n' \"$PI_OUTPUT\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PI_ARGS", argsPath)
+	t.Setenv("PI_OUTPUT", `["Pi案"]`)
+	items, err := proposals(root, "prompt", "pi")
+	if err != nil || len(items) != 1 || items[0].topic != "Pi案" {
+		t.Fatalf("pi: %v, %v", items, err)
+	}
+	args, err := os.ReadFile(argsPath)
+	if err != nil || !strings.Contains(string(args), "--print --no-session --no-extensions --no-skills --no-prompt-templates --tools read,grep,find,ls -- prompt") {
+		t.Fatalf("pi args: %q, %v", args, err)
+	}
+	t.Setenv("PI_OUTPUT", "not-json")
+	if _, err := proposals(root, "prompt", "pi"); err == nil {
+		t.Fatal("bad pi output should fail")
+	}
+	for _, args := range [][]string{{"generate", "--engine", "other"}, {"revise", "--engine"}, {"generate", "extra"}} {
+		if err := run(args); err == nil {
+			t.Fatalf("accepted args %v", args)
+		}
 	}
 }
 
