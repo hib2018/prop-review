@@ -1,10 +1,10 @@
 # prop-review
 
-提案を項目ごとに人間が承認・コメントする、ローカルの小さなCLIです。zintentの意味確認・承認ゲートとは別物です。
+A small local CLI for approving or commenting on proposals item by item. It is separate from zintent's intent-approval gate.
 
-## インストール（全リポジトリで利用）
+## Install (available in any repository)
 
-このリポジトリのルートで実行します。`~/.local/bin` を `PATH` に含めてください。
+Run from this repository's root. Add `~/.local/bin` to your `PATH`.
 
 ```sh
 mkdir -p "$HOME/.local/bin" "$HOME/.pi/agent/skills"
@@ -16,7 +16,7 @@ for skill in prop-review prop-review-ingest; do
 done
 ```
 
-Pi 以外で Agent Skills のユーザー共通ディレクトリ `~/.agents/skills` に対応するツールを使う場合は、こちらにもリンクします。
+For agents other than Pi that support the shared `~/.agents/skills` directory, link the skills there too:
 
 ```sh
 mkdir -p "$HOME/.agents/skills"
@@ -27,44 +27,48 @@ for skill in prop-review prop-review-ingest; do
 done
 ```
 
-既に Skill の配置先がある場合は上書きしません。リンク先を確認してください。Pi を起動中なら `/reload` で Skill を再読み込みします。ツール固有の Skill ディレクトリを使う場合は、そのディレクトリに同様にリンクしてください。
+Existing destinations are not overwritten. Check their targets if necessary. Run `/reload` if Pi is already open.
+
+## Review
 
 ```sh
 prop-review
 ```
 
-リポジトリ内で `prop-review` を実行すると、リポジトリルートの `prop-review-tmp/review.*/proposal.txt` から最新の未レビュー提案を開きます。見つからなければエラーになります。パスを指定する従来の `prop-review proposal.txt` も使えます。新しい提案を作っても以前の `review.*` と結果は削除・上書きしません。CLI は必要に応じてリポジトリのローカル `info/exclude` に `/prop-review-tmp/` を追記します（追跡ファイルは変更しません）。
+From any directory inside a Git repository, this opens the newest unreviewed `prop-review-tmp/review.*/proposal.txt` under the repository root. You can also supply a path: `prop-review proposal.txt`. Earlier proposals and results are never overwritten or deleted. The CLI adds `/prop-review-tmp/` to the repository's local Git `info/exclude` if needed; it does not edit tracked files.
 
-`proposal.txt` は次の形式で作ります。承認欄は必ず空欄にしてください。
+The proposal format has two lines per item, with an empty review field. The **field name is a legacy file-format token**, not UI text; keep it in Japanese for compatibility. Proposal text can be in the request's language:
 
 ```text
-設定を変更する
+Update the configuration
 承認/コメント：
 
-既存データは変更しない
+Leave existing data unchanged
 承認/コメント：
 ```
 
-以前の `何について：` 付きの提案ファイルも読み込めます。結果にはこの接頭辞を出力しません。承認欄のコロンは半角・全角を受け付け、結果には全角で統一します。文字化けした入力（不正なUTF-8や `�`）は受け付けません。
+Legacy proposals prefixed with `何について：` are also accepted; the prefix is omitted from results. Either ASCII or fullwidth colons are accepted in input review fields. Invalid UTF-8 and the replacement character `�` are rejected.
 
-端末で各項目に `a`（即承認）、`c`（コメント入力・Enterで確定）、Enter（未確認）、`b`（前の項目に戻る）、`q`（保存せず中断）を押します。操作キーは全角英字でも使えます。コメントの日本語入力・削除はCLI側で表示を更新します。最初から空行を入力した場合は「未確認扱い」の警告が出ます（Enterで確定、Escで項目に戻る）。
+Use `a` to approve, `c` to enter a comment, Enter to leave an item unconfirmed, `b` to go back, or `q` to quit without saving. Fullwidth Latin letter keys also work. If a comment is empty, the CLI warns that it leaves the item unconfirmed (Enter to confirm, Esc to go back).
 
-結果は `proposal.review.txt` に保存され、パスが標準出力に表示されます。既存の結果ファイルは上書きしません。作業中に残したい場所を指定するには `prop-review proposal.txt /path/to/result.txt` と実行してください。入力が途中で終了した場合も、結果は保存されません。結果のコメントは `コメント："..."` として承認から区別します。
+Results are written to `proposal.review.txt` next to the proposal, and the path is printed. Existing results are not overwritten. To keep the result elsewhere, run `prop-review proposal.txt /path/to/result.txt`. Interrupting review saves nothing. The file-format values `承認` and `コメント："..."` distinguish approvals and comments; comment text remains unchanged.
 
-## 提案生成・改訂（fx / Pi）
+## Generate and revise (fx or Pi SDK)
 
-fx を使う場合は `fx` CLI、Pi を使う場合は Node.js とグローバル npm の `@earendil-works/pi-coding-agent` をインストール・認証し、使用するエンジン側でモデルを設定します。Pi の生成には SDK を利用し、`pi` CLI は実行しません。生成エンジンは全リポジトリ共通のユーザー設定です（未設定時は fx）。`prop-review --engine pi|fx` で切り替えます。libfx やモデル API は使いません。
+For fx, install and authenticate the `fx` CLI. For Pi, install Node.js and the global npm package `@earendil-works/pi-coding-agent` and configure its credentials and model. Pi generation uses its SDK, **not** the `pi` CLI. The selected engine is a user-wide setting shared across repositories (fx by default). Neither libfx nor a direct model API integration is used.
 
 ```sh
-prop-review --engine pi  # 以後は Pi を使用
-prop-review generate     # 「依頼：」を入力 → 提案 → 自動レビュー
-prop-review revise       # コメントを改訂 → 新規 proposal.txt のみ保存
-prop-review              # 改訂案を再レビュー
-prop-review --engine fx  # 以後は fx を使用
+prop-review --engine pi  # Use Pi from now on
+prop-review generate     # Enter a request, generate proposals, then review
+prop-review revise       # Revise commented items; only save a new proposal.txt
+prop-review              # Review the revised proposal
+prop-review --engine fx  # Switch back to fx
 ```
 
-設定は OS のユーザー設定ディレクトリ（`os.UserConfigDir()`）内の `prop-review/engine` に保存します。`generate` / `revise` はリポジトリ内の端末で実行します。
+The engine setting is stored at `prop-review/engine` in the OS user config directory (`os.UserConfigDir()`). Run `generate` and `revise` in a repository terminal.
 
-両 CLI にはリポジトリの読み取りと提案だけを指示し、実装・ファイル変更は指示しません。Pi SDK は一時セッションで起動し、拡張・Skill・プロンプトテンプレートを無効にして読み取り専用ツールだけを渡します。生成・改訂のエンジン待機中は経過秒数を標準エラー出力に表示し、100秒でタイムアウトします（提案ファイルは作りません）。返答は JSON の提案 1〜10 件として検証し（内容に応じて10件程度、無理に水増ししません）、従来の空欄付き `proposal.txt` に変換します。改訂はコメントのある項目だけを置き換え、未確認項目は維持し、承認済み項目は元の提案・結果に残します。改訂後にレビューは自動で開きません。選択した CLI が失敗・不正な出力を返した場合や入力をキャンセルした場合、レビューは開始せず、以前のファイルは維持します。標準の `proposal.review.txt` がないレビュー（保存先を明示したレビュー）は `revise` の対象外です。
+Both engines are instructed to inspect the repository and propose changes, never implement them or modify files. The original request is passed as written; generated proposal text must use the **same language as that request**. Revisions must retain the original proposal language even when comments use another language. Pi uses an in-memory session with extensions, skills, and prompt templates disabled, and only read-only tools. While waiting for either engine, elapsed seconds are displayed on stderr; the operation times out after 100 seconds without creating a proposal file.
 
-チャットでレビュー結果を読み込むときは `prop-review-ingest` Skill を使います。生成・レビューへの案内は `prop-review` Skill が担当し、結果の取り込みは行いません。承認はその項目への意思表示だけです。実装や作業の開始は自動化しません。
+Responses are validated as a JSON array of 1–10 one-line proposals and converted to `proposal.txt` with empty review fields. Revisions replace only commented items; unconfirmed items remain, and approved items remain in the earlier proposal and result. A revision does not automatically start review. Failures, invalid output, and cancelled input do not start review or overwrite earlier files. Reviews saved to a custom destination instead of the default `proposal.review.txt` cannot be revised with `revise`.
+
+Use the `prop-review-ingest` skill to bring completed results into chat. The `prop-review` skill handles generation and review handoff, not ingestion. Approval concerns only the specific item; it never automatically starts implementation.

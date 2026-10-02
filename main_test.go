@@ -247,6 +247,16 @@ func TestReview(t *testing.T) {
 	}
 }
 
+func TestReviewMenuEnglish(t *testing.T) {
+	var menu strings.Builder
+	if err := review([]item{{topic: "提案"}}, strings.NewReader("a"), &menu, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(menu.String(), "a Approve   c Comment   Enter Skip   b Back   q Quit") {
+		t.Fatalf("menu: %q", menu.String())
+	}
+}
+
 func TestCommentAndFullwidthKeys(t *testing.T) {
 	items, err := parse(strings.NewReader("変更する\n承認/コメント:\n\n変更しない\n承認/コメント：\n"))
 	if err != nil {
