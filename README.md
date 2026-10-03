@@ -73,4 +73,4 @@ Both engines are instructed to inspect the repository and propose changes, never
 
 Responses are validated as a JSON array of 1–10 one-line proposals and converted to `proposal.txt` with empty review fields. Revisions replace only commented items; unconfirmed items remain, and approved items remain in the earlier proposal and result. A revision does not automatically start review. Failures, invalid output, and cancelled input do not start review or overwrite earlier files. Reviews saved to a custom destination instead of the default `proposal.review.txt` cannot be revised with `revise`.
 
-Use the `prop-review-ingest` skill to bring completed results into chat. The `prop-review` skill handles generation and review handoff, not ingestion. Approval concerns only the specific item; it never automatically starts implementation.
+Use the `prop-review-ingest` skill to bring completed results into chat and receive the agent's response to the review, including answers to comments when possible. The `prop-review` skill handles generation and review handoff, not ingestion. Approval concerns only the specific item; it never automatically starts implementation.
