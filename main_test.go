@@ -41,7 +41,7 @@ func TestFXAndRevision(t *testing.T) {
 	if items, err := proposals(root, "prompt", "fx"); err != nil || len(items) != 10 {
 		t.Fatalf("10 proposals should be valid: %d, %v", len(items), err)
 	}
-	for _, bad := range []string{`[]`, `[` + strings.Repeat(`"提案",`, 10) + `"提案"]`, `["bad\nline"]`, `["承認", ""]`, `not-json`, `["文字化け�"]`} {
+	for _, bad := range []string{`[]`, `[` + strings.Repeat(`"提案",`, 10) + `"提案"]`, `["bad\nline"]`, `["承認", ""]`, `not-json`, `["文字化け�"]`, `["safe\u001b[2J"]`} {
 		t.Setenv("FX_OUTPUT", bad)
 		if _, err := proposals(root, "prompt", "fx"); err == nil {
 			t.Fatalf("accepted %q", bad)
@@ -238,7 +238,7 @@ func TestReview(t *testing.T) {
 		return readComment(r, io.Discard, nil)
 	}
 	// Approve, go back, reapprove, then comment on the next item.
-	if err := review(items, strings.NewReader("abacここは修正して\n"), io.Discard, comment); err != nil {
+	if err := review(items, strings.NewReader("a\nb\na\nc\nここは修正して\n"), io.Discard, comment); err != nil {
 		t.Fatal(err)
 	}
 	want := "変更する\n承認/コメント：承認\n\n変更しない\n承認/コメント：コメント：\"ここは修正して\"\n\n"
@@ -247,9 +247,22 @@ func TestReview(t *testing.T) {
 	}
 }
 
+func TestMenuEnterDoesNotSkipNextItem(t *testing.T) {
+	items := []item{{topic: "first"}, {topic: "second"}}
+	if err := review(items, strings.NewReader("a\n"), io.Discard, nil); err == nil {
+		t.Fatal("second item must not be skipped by the first item's Enter")
+	}
+	if items[0].answer != "承認" || items[1].answer != "" {
+		t.Fatalf("answers: %+v", items)
+	}
+	if err := review(items, strings.NewReader("a\n\n"), io.Discard, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestReviewMenuEnglish(t *testing.T) {
 	var menu strings.Builder
-	if err := review([]item{{topic: "提案"}}, strings.NewReader("a"), &menu, nil); err != nil {
+	if err := review([]item{{topic: "提案"}}, strings.NewReader("a\n"), &menu, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(menu.String(), "a Approve   c Comment   Enter Skip   b Back   q Quit") {
@@ -269,7 +282,7 @@ func TestCommentAndFullwidthKeys(t *testing.T) {
 		})
 	}
 	// Empty comment cancelled with Esc; then comment "承認" without approving.
-	if err := review(items, strings.NewReader("ｃ\n\x1bc承認\nａ"), io.Discard, comment); err != nil {
+	if err := review(items, strings.NewReader("ｃ\n\n\x1bc\n承認\nａ\n"), io.Discard, comment); err != nil {
 		t.Fatal(err)
 	}
 	want := "変更する\n承認/コメント：コメント：\"承認\"\n\n変更しない\n承認/コメント：承認\n\n"
@@ -296,13 +309,13 @@ func TestNoImplicitApproval(t *testing.T) {
 	if err := review(items, strings.NewReader(""), io.Discard, comment); err == nil {
 		t.Fatal("interrupted review should fail")
 	}
-	if err := review(items, strings.NewReader("q"), io.Discard, comment); err == nil {
+	if err := review(items, strings.NewReader("q\n"), io.Discard, comment); err == nil {
 		t.Fatal("cancelled review should fail")
 	}
 	if _, err := parse(strings.NewReader("変更する\n承認/コメント：承認\n")); err == nil {
 		t.Fatal("prefilled approval should be rejected")
 	}
-	for _, topic := range []string{"\xff", "文字化け�"} {
+	for _, topic := range []string{"\xff", "文字化け�", "safe\x1b[2J"} {
 		if _, err := parse(strings.NewReader(topic + "\n承認/コメント：\n")); err == nil {
 			t.Fatal("corrupted topic should be rejected")
 		}
@@ -324,7 +337,7 @@ func TestNoImplicitApproval(t *testing.T) {
 		t.Fatalf("Japanese deletion: %q, %v, %q", line, err, output.String())
 	}
 	var menu strings.Builder
-	if err := review([]item{{topic: "test"}}, strings.NewReader("xyzq"), &menu, comment); err == nil {
+	if err := review([]item{{topic: "test"}}, strings.NewReader("xyz\nq\n"), &menu, comment); err == nil {
 		t.Fatal("q should cancel")
 	}
 	if strings.Count(menu.String(), "[1/1]") != 1 {

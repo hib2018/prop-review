@@ -47,9 +47,9 @@ Leave existing data unchanged
 承認/コメント：
 ```
 
-Legacy proposals prefixed with `何について：` are also accepted; the prefix is omitted from results. Either ASCII or fullwidth colons are accepted in input review fields. Invalid UTF-8 and the replacement character `�` are rejected.
+Legacy proposals prefixed with `何について：` are also accepted; the prefix is omitted from results. Either ASCII or fullwidth colons are accepted in input review fields. Invalid UTF-8, the replacement character `�`, and terminal control characters are rejected.
 
-Use `a` to approve, `c` to enter a comment, Enter to leave an item unconfirmed, `b` to go back, or `q` to quit without saving. Fullwidth Latin letter keys also work. If a comment is empty, the CLI warns that it leaves the item unconfirmed (Enter to confirm, Esc to go back).
+Enter `a` then Enter to approve, `c` then Enter to enter a comment, Enter alone to leave an item unconfirmed, `b` then Enter to go back, or `q` then Enter to quit without saving. Fullwidth Latin letter keys also work. Each menu choice is confirmed with Enter so its newline cannot skip the next item. If a comment is empty, the CLI warns that it leaves the item unconfirmed (Enter to confirm, Esc to go back).
 
 Results are written to `proposal.review.txt` next to the proposal, and the path is printed. Existing results are not overwritten. To keep the result elsewhere, run `prop-review proposal.txt /path/to/result.txt`. Interrupting review saves nothing. The file-format values `承認` and `コメント："..."` distinguish approvals and comments; comment text remains unchanged.
 

@@ -38,8 +38,8 @@ func parse(r io.Reader) ([]item, error) {
 			continue
 		}
 		topic := strings.TrimSpace(strings.TrimPrefix(line, "何について："))
-		if !utf8.ValidString(topic) || strings.ContainsRune(topic, utf8.RuneError) {
-			return nil, errors.New("invalid UTF-8 in proposal")
+		if !utf8.ValidString(topic) || strings.ContainsRune(topic, utf8.RuneError) || strings.IndexFunc(topic, unicode.IsControl) >= 0 {
+			return nil, errors.New("invalid or control character in proposal")
 		}
 		if topic == "" {
 			return nil, errors.New("empty topic")
@@ -63,28 +63,34 @@ func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reade
 	showPrompt := true
 	for i := 0; i < len(items); {
 		if showPrompt {
-			fmt.Fprintf(out, "\n[%d/%d] %s\na Approve   c Comment   Enter Skip   b Back   q Quit\n> ", i+1, len(items), items[i].topic)
+			fmt.Fprintf(out, "\n[%d/%d] %s\na Approve   c Comment   Enter Skip   b Back   q Quit (press Enter to confirm)\n", i+1, len(items), items[i].topic)
 			showPrompt = false
 		}
-		key, _, err := r.ReadRune()
-		if err != nil {
-			return fmt.Errorf("review interrupted: %w", err)
-		}
-		if key == utf8.RuneError {
-			fmt.Fprint(out, "\nInvalid text encoding; please try again.\n")
+		key, err := inputLine(r, out, "> ")
+		if errors.Is(err, errBadEncoding) {
+			fmt.Fprint(out, "Invalid text encoding; please try again.\n")
 			showPrompt = true
 			continue
 		}
-		if key >= 'ａ' && key <= 'ｚ' {
-			key -= 'ａ' - 'a'
+		if err != nil {
+			return fmt.Errorf("review interrupted: %w", err)
+		}
+		key = strings.TrimSpace(key)
+		if len([]rune(key)) == 1 {
+			key = strings.Map(func(r rune) rune {
+				if r >= 'ａ' && r <= 'ｚ' {
+					return r - ('ａ' - 'a')
+				}
+				return r
+			}, key)
 		}
 		switch key {
-		case 'a':
+		case "a":
 			items[i].answer = "承認"
 			items[i].comment = false
 			i++
 			showPrompt = true
-		case 'c':
+		case "c":
 			answer, err := comment(r)
 			if errors.Is(err, errCommentBack) {
 				showPrompt = true
@@ -97,17 +103,17 @@ func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reade
 			items[i].comment = answer != ""
 			i++
 			showPrompt = true
-		case '\r', '\n':
+		case "":
 			items[i].answer = ""
 			items[i].comment = false
 			i++
 			showPrompt = true
-		case 'b':
+		case "b":
 			if i > 0 {
 				i--
 				showPrompt = true
 			}
-		case 'q':
+		case "q":
 			return errors.New("review cancelled; nothing saved")
 		}
 	}
@@ -471,7 +477,7 @@ func proposalsWithTimeout(root, prompt, engine string, timeout time.Duration, pr
 	}
 	items := make([]item, 0, len(topics))
 	for _, topic := range topics {
-		if topic != strings.TrimSpace(topic) || topic == "" || strings.ContainsAny(topic, "\r\n") || !utf8.ValidString(topic) || strings.ContainsRune(topic, utf8.RuneError) {
+		if topic != strings.TrimSpace(topic) || topic == "" || strings.IndexFunc(topic, unicode.IsControl) >= 0 || !utf8.ValidString(topic) || strings.ContainsRune(topic, utf8.RuneError) {
 			return nil, fmt.Errorf("invalid %s proposal topic", engine)
 		}
 		items = append(items, item{topic: topic})
