@@ -1,5 +1,7 @@
 # prop-review
 
+The CLI source lives in `src/` (`commands.go`, `engine.go`, `proposal.go`, and `terminal.go`).
+
 A small local CLI for approving or commenting on proposals item by item. It is separate from zintent's intent-approval gate.
 
 ## Install (available in any repository)
@@ -8,7 +10,7 @@ Run from this repository's root. Add `~/.local/bin` to your `PATH`.
 
 ```sh
 mkdir -p "$HOME/.local/bin" "$HOME/.pi/agent/skills"
-GOBIN="$HOME/.local/bin" go install .
+go build -o "$HOME/.local/bin/prop-review" ./src
 for skill in prop-review prop-review-ingest; do
   if [ ! -e "$HOME/.pi/agent/skills/$skill" ] && [ ! -L "$HOME/.pi/agent/skills/$skill" ]; then
     ln -s "$PWD/skills/$skill" "$HOME/.pi/agent/skills/$skill"
