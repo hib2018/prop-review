@@ -26,16 +26,26 @@ func TestFXAndRevision(t *testing.T) {
 	}
 	bin := t.TempDir()
 	fx := filepath.Join(bin, "fx")
-	if err := os.WriteFile(fx, []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" > \"$FX_ARGS\"\nprintf '%s\\n' \"$FX_OUTPUT\"\n"), 0700); err != nil {
+	if err := os.WriteFile(fx, []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" > \"$FX_ARGS\"\ncat > \"$FX_STDIN\"\nprintf '%s\\n' \"$FX_OUTPUT\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	argsPath := filepath.Join(bin, "args")
+	stdinPath := filepath.Join(bin, "stdin")
 	t.Setenv("FX_ARGS", argsPath)
+	t.Setenv("FX_STDIN", stdinPath)
 	t.Setenv("FX_OUTPUT", `["改訂案"]`)
 	items, err := proposals(root, "prompt", "fx")
 	if err != nil || len(items) != 1 || items[0].topic != "改訂案" {
 		t.Fatalf("fx: %v, %v", items, err)
+	}
+	longPrompt := strings.Repeat("あ", maxCommentBytes/3)
+	if _, err := proposals(root, longPrompt, "fx"); err != nil {
+		t.Fatalf("long fx prompt: %v", err)
+	}
+	stdin, err := os.ReadFile(stdinPath)
+	if err != nil || string(stdin) != longPrompt {
+		t.Fatalf("fx stdin length: %d, %v", len(stdin), err)
 	}
 	t.Setenv("FX_OUTPUT", `[`+strings.Repeat(`"提案",`, 9)+`"提案"]`)
 	if items, err := proposals(root, "prompt", "fx"); err != nil || len(items) != 10 {
@@ -78,8 +88,12 @@ func TestFXAndRevision(t *testing.T) {
 		t.Fatalf("original result lost: %v", err)
 	}
 	args, err := os.ReadFile(argsPath)
-	if err != nil || !strings.Contains(string(args), `"topic":"コメント案","comment":"直して"`) {
-		t.Fatalf("fx did not receive feedback: %s, %v", args, err)
+	if err != nil || strings.TrimSpace(string(args)) != "ask --no-save" {
+		t.Fatalf("fx args: %s, %v", args, err)
+	}
+	stdin, err = os.ReadFile(stdinPath)
+	if err != nil || !strings.Contains(string(stdin), `"topic":"コメント案","comment":"直して"`) {
+		t.Fatalf("fx did not receive feedback: %s, %v", stdin, err)
 	}
 	countBefore, _ := filepath.Glob(filepath.Join(root, "prop-review-tmp", "review.*"))
 	t.Setenv("FX_OUTPUT", `not-json`)
@@ -260,6 +274,51 @@ func TestMenuEnterDoesNotSkipNextItem(t *testing.T) {
 	}
 }
 
+func TestLineEditingAndLimits(t *testing.T) {
+	var output strings.Builder
+	line, err := inputLine(bufio.NewReader(strings.NewReader("あい\x1b[D\bう\x1b[Cえ\x1b[H先\x1b[F末\n")), &output, "Comment: ", 100)
+	if err != nil || line != "先ういえ末" || !strings.Contains(output.String(), "\x1b[2Dい  \x1b[4D") {
+		t.Fatalf("cursor editing: %q, %v, %q", line, err, output.String())
+	}
+	output.Reset()
+	line, err = inputLine(bufio.NewReader(strings.NewReader("あいx\b\n")), &output, "", len("あい"))
+	if !errors.Is(err, errInputTooLong) || line != "" || !strings.Contains(output.String(), "\a") {
+		t.Fatalf("byte limit: %q, %v, %q", line, err, output.String())
+	}
+	request := strings.Repeat("あ", maxRequestBytes/3)
+	line, err = inputLine(bufio.NewReader(strings.NewReader(request+"\n")), io.Discard, "Request: ", maxRequestBytes)
+	if err != nil || line != request {
+		t.Fatalf("long request: %d bytes, %v", len(line), err)
+	}
+	line, err = inputLine(bufio.NewReader(strings.NewReader("あい\x1b[1~先\x1b[4~末\n")), io.Discard, "", 100)
+	if err != nil || line != "先あい末" {
+		t.Fatalf("Home/End: %q, %v", line, err)
+	}
+	comment, err := readComment(bufio.NewReader(strings.NewReader(strings.Repeat("x", maxCommentBytes+1)+"\n正常\n")), io.Discard, nil)
+	if err != nil || comment != "正常" {
+		t.Fatalf("overlong comment retry: %q, %v", comment, err)
+	}
+}
+
+func TestLongReviewComment(t *testing.T) {
+	root := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", root).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %s: %v", out, err)
+	}
+	path, err := saveProposal(root, []item{{topic: "提案"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	comment := strings.Repeat("あ", maxCommentBytes/3)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(path), "proposal.review.txt"), []byte(render([]item{{topic: "提案", answer: comment, comment: true}})), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, items, err := reviewedProposal(root)
+	if err != nil || len(items) != 1 || items[0].answer != comment {
+		t.Fatalf("long review: %d items, %v", len(items), err)
+	}
+}
+
 func TestReviewMenuEnglish(t *testing.T) {
 	var menu strings.Builder
 	if err := review([]item{{topic: "提案"}}, strings.NewReader("a\n"), &menu, nil); err != nil {
@@ -332,8 +391,8 @@ func TestNoImplicitApproval(t *testing.T) {
 		t.Fatalf("empty comment confirmation: %q, %v", answer, err)
 	}
 	var output strings.Builder
-	line, err := inputLine(bufio.NewReader(strings.NewReader("あい\bう\n")), &output, "コメント：")
-	if err != nil || line != "あう" || !strings.Contains(output.String(), "\x1b[2D\x1b[0K") || strings.Contains(output.String(), "\r") {
+	line, err := inputLine(bufio.NewReader(strings.NewReader("あい\bう\n")), &output, "コメント：", maxCommentBytes)
+	if err != nil || line != "あう" || !strings.Contains(output.String(), "\x1b[2D  \x1b[2D") || strings.Contains(output.String(), "\r") {
 		t.Fatalf("Japanese deletion: %q, %v, %q", line, err, output.String())
 	}
 	var menu strings.Builder
