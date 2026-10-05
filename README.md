@@ -1,8 +1,6 @@
 # prop-review
 
-The CLI source lives in `src/` (`commands.go`, `engine.go`, `proposal.go`, and `terminal.go`).
-
-A small local CLI for approving or commenting on proposals item by item. It is separate from zintent's intent-approval gate.
+A local CLI for reviewing proposals item by item. It is separate from zintent's intent-approval gate. Source code lives in `src/`.
 
 ## Install (available in any repository)
 
@@ -37,9 +35,9 @@ Existing destinations are not overwritten. Check their targets if necessary. Run
 prop-review
 ```
 
-From any directory inside a Git repository, this opens the newest unreviewed `prop-review-tmp/review.*/proposal.txt` under the repository root. You can also supply a path: `prop-review proposal.txt`. Earlier proposals and results are never overwritten or deleted. The CLI adds `/prop-review-tmp/` to the repository's local Git `info/exclude` if needed; it does not edit tracked files.
+From any directory inside a Git repository, this opens the newest unreviewed `prop-review-tmp/review.*/proposal.txt` under the repository root (by proposal modification time, then path). You can also supply a path: `prop-review proposal.txt`. Earlier proposals and results are never overwritten or deleted. `generate` and `revise` create a unique directory and add `/prop-review-tmp/` to the repository's local Git `info/exclude` if needed; plain review does not change Git settings.
 
-The proposal format has two lines per item, with an empty review field. The **field name is a legacy file-format token**, not UI text; keep it in Japanese for compatibility. Proposal text can be in the request's language:
+The proposal format has two lines per item, with an empty review field; generated files separate items with a blank line. `承認/コメント：` is a required file-format token, not UI language; do not translate it. Proposal text can be in the request's language:
 
 ```text
 Update the configuration
@@ -49,11 +47,11 @@ Leave existing data unchanged
 承認/コメント：
 ```
 
-Legacy proposals prefixed with `何について：` are also accepted; the prefix is omitted from results. Either ASCII or fullwidth colons are accepted in input review fields. Invalid UTF-8, the replacement character `�`, and terminal control characters are rejected.
+Proposals prefixed with the legacy `何について：` token are also accepted; the prefix is omitted from results. Either ASCII or fullwidth colons are accepted on input review fields; results use the fullwidth form. Proposal topics must be nonempty single lines without invalid UTF-8, the replacement character `�`, or control characters.
 
-Enter `a` then Enter to approve, `c` then Enter to enter a comment, Enter alone to leave an item unconfirmed, `b` then Enter to go back, or `q` then Enter to quit without saving. Fullwidth Latin letter keys also work. Each menu choice is confirmed with Enter so its newline cannot skip the next item. In comments, use Left/Right arrows to move the cursor, Home/End to jump to the ends, and Backspace to delete before the cursor (including Japanese characters). Comments accept up to 1 MiB of UTF-8 text; exceeding the limit rejects that entry instead of silently truncating it. If a comment is empty, the CLI warns that it leaves the item unconfirmed (Enter to confirm, Esc to go back).
+Enter `a` then Enter to approve, `c` then Enter to enter a comment, Enter alone to leave an item unconfirmed, `b` then Enter to go back, or `q` then Enter to quit without saving. Fullwidth Latin letter keys also work. Each menu choice is confirmed with Enter so its newline cannot skip the next item. Request and comment input support Left/Right, Home/End, and Backspace (including multibyte characters). Comments accept up to 1 MiB of UTF-8 text; exceeding the limit rejects that entry instead of silently truncating it. If a comment is empty, the CLI warns that it leaves the item unconfirmed (Enter to confirm, Esc to go back).
 
-Results are written to `proposal.review.txt` next to the proposal, and the path is printed. Existing results are not overwritten. To keep the result elsewhere, run `prop-review proposal.txt /path/to/result.txt`. Interrupting review saves nothing. The file-format values `承認` and `コメント："..."` distinguish approvals and comments; comment text remains unchanged.
+By default, results are written to `proposal.review.txt` next to the proposal, and the path is printed. Existing results are not overwritten. To keep the result elsewhere, run `prop-review proposal.txt /path/to/result.txt`. Interrupting review saves nothing. The file-format values `承認` and `コメント："..."` distinguish approvals and comments; comments are quoted/escaped in the file and decoded when read.
 
 ## Generate and revise (fx or Pi SDK)
 
@@ -69,8 +67,8 @@ prop-review --engine fx  # Switch back to fx
 
 The engine setting is stored at `prop-review/engine` in the OS user config directory (`os.UserConfigDir()`). Run `generate` and `revise` in a repository terminal.
 
-Both engines are instructed to inspect the repository and propose changes, never implement them or modify files. The initial request accepts up to 256 KiB of UTF-8 text and can be edited with the same cursor keys; the original request is passed as written (via stdin for either engine), and generated proposal text must use the **same language as that request**. Revisions must retain the original proposal language even when comments use another language. Pi uses an in-memory session with extensions, skills, and prompt templates disabled, and only read-only tools. While waiting for either engine, elapsed seconds are displayed on stderr; the operation times out after 100 seconds without creating a proposal file.
+Both engines are prompted to inspect the repository and propose changes, not implement them. The initial request accepts up to 256 KiB of UTF-8 text; leading/trailing whitespace is trimmed before it is included in the prompt sent via stdin. Engines are instructed to use the request's language for new proposals and the original topics' language for revisions, even if comments are in another language; language is not programmatically validated. Pi uses an in-memory session with extensions, skills, and prompt templates disabled, and only read-only tools. The external `fx ask --no-save` process is prompted not to change files, but the CLI cannot enforce its tool permissions. While waiting for either engine, elapsed seconds are displayed on stderr; generation times out after 100 seconds without saving a new proposal.
 
-Responses are validated as a JSON array of 1–10 one-line proposals and converted to `proposal.txt` with empty review fields. Revisions replace only commented items; unconfirmed items remain, and approved items remain in the earlier proposal and result. A revision does not automatically start review. Failures, invalid output, and cancelled input do not start review or overwrite earlier files. Reviews saved to a custom destination instead of the default `proposal.review.txt` cannot be revised with `revise`.
+Responses are validated as a JSON array of 1–10 nonempty single-line proposals and converted to `proposal.txt` with empty review fields. Revisions replace only commented items; unconfirmed items remain, and approved items remain in the earlier proposal and result. A revision does not automatically start review. Failed generation, invalid output, and cancelled input do not start review or overwrite earlier files. If generation succeeds but review is cancelled, the new unreviewed proposal remains on disk. Reviews saved to a custom destination instead of the default `proposal.review.txt` cannot be revised with `revise`.
 
 Use the `prop-review-ingest` skill to bring completed results into chat and receive the agent's response to the review, including answers to comments when possible. The `prop-review` skill handles generation and review handoff, not ingestion. Approval concerns only the specific item; it never automatically starts implementation.
