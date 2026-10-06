@@ -37,21 +37,21 @@ prop-review
 
 From any directory inside a Git repository, this opens the newest unreviewed `prop-review-tmp/review.*/proposal.txt` under the repository root (by proposal modification time, then path). You can also supply a path: `prop-review proposal.txt`. Earlier proposals and results are never overwritten or deleted. `generate` and `revise` create a unique directory and add `/prop-review-tmp/` to the repository's local Git `info/exclude` if needed; plain review does not change Git settings.
 
-The proposal format has two lines per item, with an empty review field; generated files separate items with a blank line. `承認/コメント：` is a required file-format token, not UI language; do not translate it. Proposal text can be in the request's language:
+The proposal format has two lines per item, with an empty review field; generated files separate items with a blank line. `Approval/Comment:` is a fixed file-format token, not UI language; proposal text can be in the request's language. These are illustrative proposals, not built-in actions:
 
 ```text
-Update the configuration
-承認/コメント：
+Add a command to export the current settings
+Approval/Comment:
 
-Leave existing data unchanged
-承認/コメント：
+Document how to restore a saved review
+Approval/Comment:
 ```
 
-Proposals prefixed with the legacy `何について：` token are also accepted; the prefix is omitted from results. Either ASCII or fullwidth colons are accepted on input review fields; results use the fullwidth form. Proposal topics must be nonempty single lines without invalid UTF-8, the replacement character `�`, or control characters.
+Existing proposals with `承認/コメント：` or `承認/コメント:` and the legacy `何について：` prefix are still accepted. New results use the English format. Proposal topics must be nonempty single lines without invalid UTF-8, the replacement character `�`, or control characters.
 
 Enter `a` then Enter to approve, `c` then Enter to enter a comment, Enter alone to leave an item unconfirmed, `b` then Enter to go back, or `q` then Enter to quit without saving. Fullwidth Latin letter keys also work. Each menu choice is confirmed with Enter so its newline cannot skip the next item. Request and comment input support Left/Right, Home/End, and Backspace (including multibyte characters). Comments accept up to 1 MiB of UTF-8 text; exceeding the limit rejects that entry instead of silently truncating it. If a comment is empty, the CLI warns that it leaves the item unconfirmed (Enter to confirm, Esc to go back).
 
-By default, results are written to `proposal.review.txt` next to the proposal, and the path is printed. Existing results are not overwritten. To keep the result elsewhere, run `prop-review proposal.txt /path/to/result.txt`. Interrupting review saves nothing. The file-format values `承認` and `コメント："..."` distinguish approvals and comments; comments are quoted/escaped in the file and decoded when read.
+By default, results are written to `proposal.review.txt` next to the proposal, and the path is printed. Existing results are not overwritten. To keep the result elsewhere, run `prop-review proposal.txt /path/to/result.txt`. Interrupting review saves nothing. The file-format values `Approved` and `Comment: "..."` distinguish approvals and comments; comments are quoted/escaped in the file and decoded when read. Existing Japanese-format results (`承認/コメント：承認` and `承認/コメント：コメント："..."`) remain readable for revision and ingestion.
 
 ## Generate and revise (fx or Pi SDK)
 

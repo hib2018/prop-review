@@ -42,7 +42,7 @@ func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reade
 		}
 		switch key {
 		case "a":
-			items[i].answer = "承認"
+			items[i].answer = "Approved"
 			items[i].comment = false
 			i++
 			showPrompt = true
