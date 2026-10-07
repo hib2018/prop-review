@@ -100,7 +100,7 @@ func latestProposal(root string) (string, error) {
 	return latest, nil
 }
 
-func saveProposal(root string, items []item) (string, error) {
+func saveProposal(root string, items []item, parent string) (string, error) {
 	base := filepath.Join(root, "prop-review-tmp")
 	if err := os.MkdirAll(base, 0700); err != nil {
 		return "", err
@@ -133,9 +133,21 @@ func saveProposal(root string, items []item) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if parent != "" {
+		// The parent is another review directory under the same repository.
+		name := filepath.Base(filepath.Dir(parent))
+		if filepath.Dir(filepath.Dir(parent)) != base || filepath.Base(parent) != "proposal.txt" || !strings.HasPrefix(name, "review.") {
+			os.Remove(dir)
+			return "", errors.New("invalid parent proposal path")
+		}
+		if err := os.WriteFile(filepath.Join(dir, "parent.txt"), []byte(name+"\n"), 0600); err != nil {
+			os.RemoveAll(dir)
+			return "", err
+		}
+	}
 	path := filepath.Join(dir, "proposal.txt")
 	if err := os.WriteFile(path, []byte(render(items)), 0600); err != nil {
-		os.Remove(dir)
+		os.RemoveAll(dir)
 		return "", err
 	}
 	return path, nil

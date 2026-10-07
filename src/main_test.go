@@ -59,9 +59,12 @@ func TestFXAndRevision(t *testing.T) {
 	}
 	t.Setenv("FX_OUTPUT", `["改訂案"]`)
 	original := []item{{topic: "承認案"}, {topic: "コメント案"}, {topic: "保留案"}}
-	path, err := saveProposal(root, original)
+	path, err := saveProposal(root, original, "")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(path), "parent.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("initial proposal must not have a parent: %v", err)
 	}
 	result := []item{{topic: "承認案", answer: "Approved"}, {topic: "コメント案", answer: "直して", comment: true}, {topic: "保留案"}}
 	resultPath := filepath.Join(filepath.Dir(path), "proposal.review.txt")
@@ -80,6 +83,10 @@ func TestFXAndRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	link, err := os.ReadFile(filepath.Join(filepath.Dir(newPath), "parent.txt"))
+	if err != nil || string(link) != filepath.Base(filepath.Dir(path))+"\n" {
+		t.Fatalf("revision parent: %q, %v", link, err)
+	}
 	data, err := os.ReadFile(newPath)
 	if err != nil || string(data) != "改訂案\nApproval/Comment:\n\n保留案\nApproval/Comment:\n\n" {
 		t.Fatalf("revision: %q, %v", data, err)
@@ -87,12 +94,28 @@ func TestFXAndRevision(t *testing.T) {
 	if _, err := os.Stat(resultPath); err != nil {
 		t.Fatalf("original result lost: %v", err)
 	}
+	// Another revision links to its immediate predecessor, preserving the full chain.
+	if err := os.WriteFile(filepath.Join(filepath.Dir(newPath), "proposal.review.txt"), []byte(render([]item{{topic: "改訂案", answer: "again", comment: true}, {topic: "保留案"}})), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FX_OUTPUT", `["再改訂案"]`)
+	if err := run([]string{"revise"}); err != nil {
+		t.Fatal(err)
+	}
+	again, err := latestProposal(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, err = os.ReadFile(filepath.Join(filepath.Dir(again), "parent.txt"))
+	if err != nil || string(link) != filepath.Base(filepath.Dir(newPath))+"\n" {
+		t.Fatalf("second revision parent: %q, %v", link, err)
+	}
 	args, err := os.ReadFile(argsPath)
 	if err != nil || strings.TrimSpace(string(args)) != "ask --no-save" {
 		t.Fatalf("fx args: %s, %v", args, err)
 	}
 	stdin, err = os.ReadFile(stdinPath)
-	if err != nil || !strings.Contains(string(stdin), `"topic":"コメント案","comment":"直して"`) {
+	if err != nil || !strings.Contains(string(stdin), `"topic":"改訂案","comment":"again"`) {
 		t.Fatalf("fx did not receive feedback: %s, %v", stdin, err)
 	}
 	countBefore, _ := filepath.Glob(filepath.Join(root, "prop-review-tmp", "review.*"))
@@ -305,7 +328,7 @@ func TestLongReviewComment(t *testing.T) {
 	if out, err := exec.Command("git", "init", "-q", root).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %s: %v", out, err)
 	}
-	path, err := saveProposal(root, []item{{topic: "提案"}})
+	path, err := saveProposal(root, []item{{topic: "提案"}}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

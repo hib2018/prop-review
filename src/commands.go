@@ -117,12 +117,14 @@ func generate(revise bool, engine string) error {
 	}
 	var prompt string
 	var commented, original []item
+	var parent string
 	if revise {
 		path, items, err := reviewedProposal(root)
 		if err != nil {
 			return err
 		}
 		original = items
+		parent = path
 		for _, it := range original {
 			if it.comment {
 				commented = append(commented, it)
@@ -177,7 +179,7 @@ func generate(revise bool, engine string) error {
 		}
 		items = merged
 	}
-	path, err := saveProposal(root, items)
+	path, err := saveProposal(root, items, parent)
 	if err != nil {
 		return err
 	}
