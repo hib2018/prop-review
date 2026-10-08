@@ -60,12 +60,15 @@ For fx, install and authenticate the `fx` CLI. For Pi, install Node.js and the g
 ```sh
 prop-review --engine pi  # Use Pi from now on
 prop-review generate     # Enter a request, generate proposals, then review
+prop-review issue        # Select an open GitHub issue, generate proposals, then review
 prop-review revise       # Revise commented items; only save a new proposal.txt
 prop-review              # Review the revised proposal
 prop-review --engine fx  # Switch back to fx
 ```
 
 The engine setting is stored at `prop-review/engine` in the OS user config directory (`os.UserConfigDir()`). Run `generate` and `revise` in a repository terminal.
+
+`issue` requires an installed, authenticated `gh` CLI and a GitHub repository recognized by `gh`. It lists the first 30 open issues (the `gh issue list` default), prompts for a listed issue number in the terminal (`q` cancels), and sends its title, body, number and URL to the selected engine. Issues outside that list are not selectable. Oversized issue data (>256 KiB as JSON) is rejected. Issue text is treated as untrusted input; no issue is changed by the CLI. As with `generate`, a successful generation creates a new proposal and starts review.
 
 Both engines are prompted to inspect the repository and propose changes, not implement them. The initial request accepts up to 256 KiB of UTF-8 text; leading/trailing whitespace is trimmed before it is included in the prompt sent via stdin. Engines are instructed to use the request's language for new proposals and the original topics' language for revisions, even if comments are in another language; language is not programmatically validated. Pi uses an in-memory session with extensions, skills, and prompt templates disabled, and only read-only tools. The external `fx ask --no-save` process is prompted not to change files, but the CLI cannot enforce its tool permissions. While waiting for either engine, elapsed seconds are displayed on stderr; generation times out after 100 seconds without saving a new proposal.
 
