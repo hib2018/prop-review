@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
@@ -97,11 +98,28 @@ func inputLine(r *bufio.Reader, out io.Writer, prompt string, maxBytes int) (str
 	var line []rune
 	cursor, bytes := 0, 0
 	badEncoding, tooLong := false, false
+	type runeResult struct {
+		key rune
+		err error
+	}
+	var pending <-chan runeResult
+	var queued runeResult
+	hasQueued := false
 	for {
-		key, _, err := r.ReadRune()
-		if err != nil {
-			return "", err
+		var current runeResult
+		switch {
+		case hasQueued:
+			current, hasQueued = queued, false
+		case pending != nil:
+			current = <-pending
+			pending = nil
+		default:
+			current.key, _, current.err = r.ReadRune()
 		}
+		if current.err != nil {
+			return "", current.err
+		}
+		key := current.key
 		switch key {
 		case '\r', '\n':
 			fmt.Fprint(out, "\n")
@@ -113,8 +131,20 @@ func inputLine(r *bufio.Reader, out io.Writer, prompt string, maxBytes int) (str
 			}
 			return string(line), nil
 		case '\x1b':
+			// Keep the read pending after a lone Esc so the next character is not lost.
+			result := make(chan runeResult, 1)
+			go func() {
+				key, _, err := r.ReadRune()
+				result <- runeResult{key, err}
+			}()
+			select {
+			case queued = <-result:
+			case <-time.After(50 * time.Millisecond):
+				pending = result
+				continue
+			}
 			// Arrow keys and Home/End are escape sequences in raw terminal mode.
-			if next, _, err := r.ReadRune(); err == nil && (next == '[' || next == 'O') {
+			if queued.err == nil && (queued.key == '[' || queued.key == 'O') {
 				if direction, _, err := r.ReadRune(); err == nil {
 					if direction >= '0' && direction <= '9' {
 						if suffix, _, err := r.ReadRune(); err != nil || suffix != '~' {
@@ -150,6 +180,8 @@ func inputLine(r *bufio.Reader, out io.Writer, prompt string, maxBytes int) (str
 						}
 					}
 				}
+			} else {
+				hasQueued = true
 			}
 		case '\b', 127:
 			if cursor > 0 {

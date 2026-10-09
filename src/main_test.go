@@ -448,6 +448,54 @@ func TestLineEditingAndLimits(t *testing.T) {
 	}
 }
 
+func TestLoneEscInput(t *testing.T) {
+	for _, tc := range []struct {
+		name, input, want string
+	}{
+		{"request character", "a\x1bbc\n", "abc"},
+		{"request enter", "a\x1b\nb\n", "a"},
+		{"arrow and home/end", "あい\x1b[Dう\x1b[C\x1b[H先\x1b[F末\n", "先あうい末"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			line, err := inputLine(bufio.NewReader(strings.NewReader(tc.input)), io.Discard, "Request: ", 100)
+			if err != nil || line != tc.want {
+				t.Fatalf("request: %q, %v", line, err)
+			}
+		})
+	}
+	comment, err := readComment(bufio.NewReader(strings.NewReader("a\x1bbc\n")), io.Discard, nil)
+	if err != nil || comment != "abc" {
+		t.Fatalf("comment after Esc: %q, %v", comment, err)
+	}
+	comment, err = readComment(bufio.NewReader(strings.NewReader("a\x1b\n")), io.Discard, nil)
+	if err != nil || comment != "a" {
+		t.Fatalf("comment Enter after Esc: %q, %v", comment, err)
+	}
+
+	// A real pause after Esc must not consume the next byte in a competing read.
+	for _, tc := range []struct {
+		name, after, want string
+	}{
+		{"character", "b\n", "ab"},
+		{"enter", "\n", "a"},
+	} {
+		t.Run("delayed "+tc.name, func(t *testing.T) {
+			reader, writer := io.Pipe()
+			defer reader.Close()
+			go func() {
+				writer.Write([]byte("a\x1b"))
+				time.Sleep(100 * time.Millisecond)
+				writer.Write([]byte(tc.after))
+				writer.Close()
+			}()
+			line, err := inputLine(bufio.NewReader(reader), io.Discard, "Request: ", 100)
+			if err != nil || line != tc.want {
+				t.Fatalf("request after Esc: %q, %v", line, err)
+			}
+		})
+	}
+}
+
 func TestLongReviewComment(t *testing.T) {
 	root := t.TempDir()
 	if out, err := exec.Command("git", "init", "-q", root).CombinedOutput(); err != nil {
