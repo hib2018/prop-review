@@ -58,6 +58,7 @@ By default, results are written to `proposal.review.txt` next to the proposal, a
 For fx, install and authenticate the `fx` CLI. For Pi, install Node.js and the global npm package `@earendil-works/pi-coding-agent` and configure its credentials and model. Pi generation uses its SDK, **not** the `pi` CLI. The selected engine is a user-wide setting shared across repositories (fx by default). Neither libfx nor a direct model API integration is used.
 
 ```sh
+prop-review engine       # Show current engine (fx by default; does not change settings)
 prop-review --engine pi  # Use Pi from now on
 prop-review generate     # Enter a request, generate proposals, then review
 prop-review issue        # Select an open GitHub issue, generate proposals, then review

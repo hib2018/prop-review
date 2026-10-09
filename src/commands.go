@@ -15,6 +15,17 @@ import (
 )
 
 func run(args []string) error {
+	if len(args) > 0 && args[0] == "engine" {
+		if len(args) != 1 {
+			return errors.New("usage: prop-review engine")
+		}
+		engine, err := selectedEngine()
+		if err != nil {
+			return err
+		}
+		fmt.Println(engine)
+		return nil
+	}
 	if len(args) > 0 && args[0] == "--engine" {
 		if len(args) != 2 {
 			return errors.New("usage: prop-review --engine fx|pi")
@@ -35,7 +46,7 @@ func run(args []string) error {
 		return generate(args[0] == "revise", engine)
 	}
 	if len(args) > 2 {
-		return errors.New("usage: prop-review [--engine fx|pi|generate|revise|issue|proposal.txt [result.txt]]")
+		return errors.New("usage: prop-review [engine|--engine fx|pi|generate|revise|issue|proposal.txt [result.txt]]")
 	}
 	if len(args) == 0 {
 		root, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()

@@ -181,6 +181,46 @@ func TestIssueSelectionAndGeneration(t *testing.T) {
 	}
 }
 
+func TestEngineStatus(t *testing.T) {
+	config := t.TempDir()
+	t.Setenv("HOME", config)
+	t.Setenv("XDG_CONFIG_HOME", config)
+	check := func(want string) {
+		t.Helper()
+		reader, writer, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		stdout := os.Stdout
+		os.Stdout = writer
+		defer func() { os.Stdout = stdout }()
+		err = run([]string{"engine"})
+		writer.Close()
+		output, readErr := io.ReadAll(reader)
+		reader.Close()
+		if err != nil || readErr != nil || string(output) != want+"\n" {
+			t.Fatalf("engine status: %q, %v, %v", output, err, readErr)
+		}
+	}
+	check("fx")
+	if _, err := os.Stat(mustEnginePath(t)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("status should not create a setting: %v", err)
+	}
+	if err := setEngine("pi"); err != nil {
+		t.Fatal(err)
+	}
+	check("pi")
+	if err := run([]string{"engine", "extra"}); err == nil {
+		t.Fatal("engine status accepted extra arguments")
+	}
+	if err := os.WriteFile(mustEnginePath(t), []byte("invalid\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"engine"}); err == nil {
+		t.Fatal("engine status accepted invalid setting")
+	}
+}
+
 func TestPiEngine(t *testing.T) {
 	config := t.TempDir()
 	t.Setenv("HOME", config)
