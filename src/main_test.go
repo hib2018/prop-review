@@ -9,9 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestFXAndRevision(t *testing.T) {
@@ -425,7 +427,7 @@ func TestMenuEnterDoesNotSkipNextItem(t *testing.T) {
 func TestLineEditingAndLimits(t *testing.T) {
 	var output strings.Builder
 	line, err := inputLine(bufio.NewReader(strings.NewReader("あい\x1b[D\bう\x1b[Cえ\x1b[H先\x1b[F末\n")), &output, "Comment: ", 100)
-	if err != nil || line != "先ういえ末" || !strings.Contains(output.String(), "\x1b[2Dい  \x1b[4D") {
+	if err != nil || line != "先ういえ末" {
 		t.Fatalf("cursor editing: %q, %v, %q", line, err, output.String())
 	}
 	output.Reset()
@@ -491,6 +493,115 @@ func TestLoneEscInput(t *testing.T) {
 			line, err := inputLine(bufio.NewReader(reader), io.Discard, "Request: ", 100)
 			if err != nil || line != tc.want {
 				t.Fatalf("request after Esc: %q, %v", line, err)
+			}
+		})
+	}
+}
+
+type narrowScreen struct {
+	strings.Builder
+	width int
+}
+
+func (s *narrowScreen) terminalWidth() int { return s.width }
+
+func (s *narrowScreen) state() ([]string, int, int) {
+	rows := map[int]map[int]rune{}
+	row, col := 0, 0
+	output := s.String()
+	for i := 0; i < len(output); {
+		switch output[i] {
+		case '\x1b':
+			end := i + 2
+			for end < len(output) && output[end] >= '0' && output[end] <= '9' {
+				end++
+			}
+			value, _ := strconv.Atoi(output[i+2 : end])
+			switch output[end] {
+			case 'A':
+				row -= value
+			case 'B':
+				row += value
+			case 'C':
+				col += value
+			case 'J':
+				for y, cells := range rows {
+					if y > row {
+						delete(rows, y)
+					} else if y == row {
+						for x := range cells {
+							if x >= col {
+								delete(cells, x)
+							}
+						}
+					}
+				}
+			}
+			i = end + 1
+		case '\r':
+			col = 0
+			i++
+		case '\n':
+			row++
+			col = 0
+			i++
+		default:
+			ch, size := utf8.DecodeRuneInString(output[i:])
+			if rows[row] == nil {
+				rows[row] = map[int]rune{}
+			}
+			rows[row][col] = ch
+			if displayWidth(ch) == 2 {
+				rows[row][col+1] = ' '
+			}
+			col += displayWidth(ch)
+			i += size
+		}
+	}
+	lines := make([]string, row+1)
+	for y, cells := range rows {
+		for x, ch := range cells {
+			if len([]rune(lines[y])) <= x {
+				lines[y] += strings.Repeat(" ", x+1-len([]rune(lines[y])))
+			}
+			chars := []rune(lines[y])
+			chars[x] = ch
+			lines[y] = string(chars)
+		}
+		lines[y] = strings.TrimRight(lines[y], " ")
+	}
+	return lines, row, col
+}
+
+func TestWrappedLineEditing(t *testing.T) {
+	for _, tc := range []struct {
+		name, prompt, keys, want string
+		lines                    []string
+		cursorCol                int
+	}{
+		{"request ASCII", "Request: ", "abcd\x1b[Hあ\x1b[Fい\x1b[D\bZ\n", "あabcZい", []string{"Request: あ a", "bcZい"}, 5},
+		{"comment Japanese", "\nComment: ", "あいう\x1b[H先\x1b[F末\x1b[D\bZ\n", "先あいZ末", []string{"", "Comment: 先", "あ い Z末"}, 7},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			screen := &narrowScreen{width: 12}
+			got, err := inputLine(bufio.NewReader(strings.NewReader(tc.keys)), screen, tc.prompt, 100)
+			if err != nil || got != tc.want {
+				t.Fatalf("input: %q, %v", got, err)
+			}
+			beforeEnter := &narrowScreen{width: screen.width}
+			beforeEnter.WriteString(strings.TrimSuffix(screen.String(), "\n"))
+			_, editRow, editCol := beforeEnter.state()
+			if editRow != len(tc.lines)-1 || editCol != tc.cursorCol {
+				t.Fatalf("editing cursor: (%d,%d), want (%d,%d)", editRow, editCol, len(tc.lines)-1, tc.cursorCol)
+			}
+			lines, row, col := screen.state()
+			if row != len(tc.lines) || col != 0 || len(lines) < len(tc.lines) {
+				t.Fatalf("cursor: (%d,%d), screen: %q", row, col, lines)
+			}
+			for i, want := range tc.lines {
+				if lines[i] != want {
+					t.Fatalf("screen row %d: %q, want %q; all: %q", i, lines[i], want, lines)
+				}
 			}
 		})
 	}
@@ -609,7 +720,7 @@ func TestNoImplicitApproval(t *testing.T) {
 	}
 	var output strings.Builder
 	line, err := inputLine(bufio.NewReader(strings.NewReader("あい\bう\n")), &output, "Comment: ", maxCommentBytes)
-	if err != nil || line != "あう" || !strings.Contains(output.String(), "\x1b[2D  \x1b[2D") || strings.Contains(output.String(), "\r") {
+	if err != nil || line != "あう" || !strings.Contains(output.String(), "\x1b[J") {
 		t.Fatalf("Japanese deletion: %q, %v, %q", line, err, output.String())
 	}
 	var menu strings.Builder

@@ -85,18 +85,93 @@ func displayWidth(r rune) int {
 	return 1
 }
 
-func lineWidth(line []rune) int {
-	width := 0
-	for _, r := range line {
-		width += displayWidth(r)
+// visualPosition includes the prompt so edits remain correct across wrapped rows.
+func visualPosition(text []rune, width int) (row, col int) {
+	for _, ch := range text {
+		w := displayWidth(ch)
+		if col+w > width {
+			row++
+			col = 0
+		}
+		col += w
+		if col == width {
+			row++
+			col = 0
+		}
 	}
-	return width
+	return
+}
+
+func moveCursor(out io.Writer, fromRow, toRow, toCol int) {
+	if fromRow > toRow {
+		fmt.Fprintf(out, "\x1b[%dA", fromRow-toRow)
+	} else if fromRow < toRow {
+		fmt.Fprintf(out, "\x1b[%dB", toRow-fromRow)
+	}
+	fmt.Fprint(out, "\r")
+	if toCol > 0 {
+		fmt.Fprintf(out, "\x1b[%dC", toCol)
+	}
+}
+
+func drawRunes(out io.Writer, text []rune, width int, col int) {
+	for _, ch := range text {
+		w := displayWidth(ch)
+		if col+w > width {
+			fmt.Fprint(out, "\r\n")
+			col = 0
+		}
+		fmt.Fprint(out, string(ch))
+		col += w
+		if col == width {
+			fmt.Fprint(out, "\r\n")
+			col = 0
+		}
+	}
 }
 
 func inputLine(r *bufio.Reader, out io.Writer, prompt string, maxBytes int) (string, error) {
-	fmt.Fprint(out, prompt)
+	width := 1 << 30 // Non-terminal writers do not have a screen edge.
+	if tty, ok := out.(*os.File); ok {
+		if size, err := stty(tty, "size"); err == nil {
+			var rows, columns int
+			if _, err := fmt.Sscan(size, &rows, &columns); err == nil && columns > 0 {
+				width = columns
+			}
+		}
+	}
+	if screen, ok := out.(interface{ terminalWidth() int }); ok && screen.terminalWidth() > 0 {
+		width = screen.terminalWidth()
+	}
+	width = max(width, 2) // Wide characters cannot fit in a one-column terminal.
+	prefix := []rune(prompt[strings.LastIndex(prompt, "\n")+1:])
+	fmt.Fprint(out, prompt[:strings.LastIndex(prompt, "\n")+1])
+	drawRunes(out, prefix, width, 0)
 	var line []rune
 	cursor, bytes := 0, 0
+	endRow, endCol := visualPosition(prefix, width)
+	position := func(index int) (int, int) {
+		if index == len(line) {
+			return endRow, endCol
+		}
+		return visualPosition(append(append([]rune(nil), prefix...), line[:index]...), width)
+	}
+	move := func(index int) {
+		fromRow, _ := position(cursor)
+		toRow, toCol := position(index)
+		moveCursor(out, fromRow, toRow, toCol)
+		cursor = index
+	}
+	redraw := func(oldRow int) {
+		moveCursor(out, oldRow, 0, 0)
+		fmt.Fprint(out, "\x1b[J")
+		drawRunes(out, prefix, width, 0)
+		_, prefixCol := visualPosition(prefix, width)
+		drawRunes(out, line, width, prefixCol)
+		endRow, _ := position(len(line))
+		row, col := position(cursor)
+		moveCursor(out, endRow, row, col)
+	}
 	badEncoding, tooLong := false, false
 	type runeResult struct {
 		key rune
@@ -122,6 +197,7 @@ func inputLine(r *bufio.Reader, out io.Writer, prompt string, maxBytes int) (str
 		key := current.key
 		switch key {
 		case '\r', '\n':
+			move(len(line))
 			fmt.Fprint(out, "\n")
 			if badEncoding {
 				return "", errBadEncoding
@@ -160,24 +236,16 @@ func inputLine(r *bufio.Reader, out io.Writer, prompt string, maxBytes int) (str
 					switch direction {
 					case 'D':
 						if cursor > 0 {
-							cursor--
-							fmt.Fprintf(out, "\x1b[%dD", displayWidth(line[cursor]))
+							move(cursor - 1)
 						}
 					case 'C':
 						if cursor < len(line) {
-							fmt.Fprintf(out, "\x1b[%dC", displayWidth(line[cursor]))
-							cursor++
+							move(cursor + 1)
 						}
 					case 'H':
-						if cursor > 0 {
-							fmt.Fprintf(out, "\x1b[%dD", lineWidth(line[:cursor]))
-							cursor = 0
-						}
+						move(0)
 					case 'F':
-						if cursor < len(line) {
-							fmt.Fprintf(out, "\x1b[%dC", lineWidth(line[cursor:]))
-							cursor = len(line)
-						}
+						move(len(line))
 					}
 				}
 			} else {
@@ -185,12 +253,12 @@ func inputLine(r *bufio.Reader, out io.Writer, prompt string, maxBytes int) (str
 			}
 		case '\b', 127:
 			if cursor > 0 {
+				oldRow, _ := position(cursor)
 				cursor--
-				deleted := displayWidth(line[cursor])
 				bytes -= len(string(line[cursor]))
 				line = append(line[:cursor], line[cursor+1:]...)
-				tail := line[cursor:]
-				fmt.Fprintf(out, "\x1b[%dD%s%s\x1b[%dD", deleted, string(tail), strings.Repeat(" ", deleted), lineWidth(tail)+deleted)
+				endRow, endCol = visualPosition(append(append([]rune(nil), prefix...), line...), width)
+				redraw(oldRow)
 			}
 		case utf8.RuneError:
 			badEncoding = true
@@ -201,15 +269,27 @@ func inputLine(r *bufio.Reader, out io.Writer, prompt string, maxBytes int) (str
 					fmt.Fprint(out, "\a")
 					continue
 				}
+				oldRow, oldCol := position(cursor)
+				atEnd := cursor == len(line)
 				bytes += len(string(key))
 				line = append(line, 0)
 				copy(line[cursor+1:], line[cursor:])
 				line[cursor] = key
 				cursor++
-				tail := line[cursor:]
-				fmt.Fprint(out, string(key), string(tail))
-				if width := lineWidth(tail); width > 0 {
-					fmt.Fprintf(out, "\x1b[%dD", width)
+				if atEnd {
+					drawRunes(out, []rune{key}, width, oldCol)
+					if oldCol+displayWidth(key) > width {
+						endRow++
+						endCol = 0
+					}
+					endCol += displayWidth(key)
+					if endCol == width {
+						endRow++
+						endCol = 0
+					}
+				} else {
+					endRow, endCol = visualPosition(append(append([]rune(nil), prefix...), line...), width)
+					redraw(oldRow)
 				}
 			}
 		}
