@@ -11,6 +11,7 @@ const resourceLoader = new DefaultResourceLoader({
   noSkills: true,
   noPromptTemplates: true,
 });
+await resourceLoader.reload();
 const { session } = await createAgentSession({
   cwd,
   tools: ["read", "grep", "find", "ls"],

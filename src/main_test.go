@@ -250,6 +250,42 @@ func TestPiEngine(t *testing.T) {
 	}
 }
 
+func TestPiSDKLoadsProjectInstructions(t *testing.T) {
+	root := t.TempDir()
+	marker := "prop-review-test-instructions-unique"
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agents := filepath.Join(realRoot, "AGENTS.md")
+	if err := os.WriteFile(agents, []byte(marker+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	modules, err := exec.Command("npm", "root", "-g").Output()
+	if err != nil {
+		t.Fatalf("locate Pi SDK: %v", err)
+	}
+	// Run the production session setup with the real SDK, stopping before the model call.
+	setup, _, ok := strings.Cut(piSDK, "try {\n")
+	if !ok {
+		t.Fatal("Pi SDK session setup not found")
+	}
+	script := setup + `
+import assert from "node:assert/strict";
+try {
+  assert(resourceLoader.getAgentsFiles().agentsFiles.some(file => file.path === process.argv[2] && file.content.includes(process.argv[3])), "project AGENTS.md was not loaded");
+  assert(session.systemPrompt.includes(process.argv[3]));
+} finally {
+  session.dispose();
+}
+`
+	cmd := exec.Command("node", "--input-type=module", "-e", script, strings.TrimSpace(string(modules)), agents, marker)
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("Pi SDK project instructions: %v\n%s", err, out)
+	}
+}
+
 func mustEnginePath(t *testing.T) string {
 	t.Helper()
 	path, err := enginePath()
