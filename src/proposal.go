@@ -38,14 +38,14 @@ func parse(r io.Reader) ([]item, error) {
 		if line == "" {
 			continue
 		}
-		topic := strings.TrimSpace(strings.TrimPrefix(line, "何について：")) // Legacy proposal prefix.
+		topic := line
 		if !utf8.ValidString(topic) || strings.ContainsRune(topic, utf8.RuneError) || strings.IndexFunc(topic, unicode.IsControl) >= 0 {
 			return nil, errors.New("invalid or control character in proposal")
 		}
 		if topic == "" {
 			return nil, errors.New("empty topic")
 		}
-		if !s.Scan() || (strings.TrimSpace(s.Text()) != "Approval/Comment:" && strings.TrimSpace(s.Text()) != "承認/コメント：" && strings.TrimSpace(s.Text()) != "承認/コメント:") {
+		if !s.Scan() || strings.TrimSpace(s.Text()) != "Approval/Comment:" {
 			return nil, fmt.Errorf("%q: expected empty Approval/Comment: line", topic)
 		}
 		items = append(items, item{topic: topic})
@@ -322,22 +322,15 @@ func readReviewedProposal(path string) ([]item, error) {
 		line := s.Text()
 		prefix := "Approval/Comment:"
 		if !strings.HasPrefix(line, prefix) {
-			prefix = "承認/コメント：" // Legacy results.
-			if !strings.HasPrefix(line, prefix) {
-				return nil, errors.New("invalid review result")
-			}
+			return nil, errors.New("invalid review result")
 		}
 		answer := strings.TrimPrefix(line, prefix)
 		switch {
-		case answer == "Approved", answer == "承認":
+		case answer == "Approved":
 			items[i].answer = "Approved"
 		case answer == "":
-		case strings.HasPrefix(answer, "Comment: "), strings.HasPrefix(answer, "コメント："):
-			commentPrefix := "Comment: "
-			if strings.HasPrefix(answer, "コメント：") {
-				commentPrefix = "コメント："
-			}
-			comment, err := strconv.Unquote(strings.TrimPrefix(answer, commentPrefix))
+		case strings.HasPrefix(answer, "Comment: "):
+			comment, err := strconv.Unquote(strings.TrimPrefix(answer, "Comment: "))
 			if err != nil || comment == "" {
 				return nil, errors.New("invalid review comment")
 			}

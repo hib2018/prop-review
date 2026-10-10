@@ -47,11 +47,11 @@ Document how to restore a saved review
 Approval/Comment:
 ```
 
-Existing proposals with `承認/コメント：` or `承認/コメント:` and the legacy `何について：` prefix are still accepted. New results use the English format. Proposal topics must be nonempty single lines without invalid UTF-8, the replacement character `�`, or control characters.
+Only the `Approval/Comment:` field is accepted in proposals; topic text is not interpreted as a format prefix. Proposal topics must be nonempty single lines without invalid UTF-8, the replacement character `�`, or control characters.
 
 Enter `a` then Enter to approve, `c` then Enter to enter a comment, Enter alone to leave an item unconfirmed, `b` then Enter to go back, or `q` then Enter to quit without saving. Fullwidth Latin letter keys also work. Each menu choice is confirmed with Enter so its newline cannot skip the next item. Request and comment input support Left/Right, Home/End, and Backspace (including multibyte characters). Comments accept up to 1 MiB of UTF-8 text; exceeding the limit rejects that entry instead of silently truncating it. If a comment is empty, the CLI warns that it leaves the item unconfirmed (Enter to confirm, Esc to go back).
 
-By default, results are written to `proposal.review.txt` next to the proposal, and the path is printed. Existing results are not overwritten. To keep the result elsewhere, run `prop-review proposal.txt /path/to/result.txt`. Interrupting review saves nothing. The file-format values `Approved` and `Comment: "..."` distinguish approvals and comments; comments are quoted/escaped in the file and decoded when read. Existing Japanese-format results (`承認/コメント：承認` and `承認/コメント：コメント："..."`) remain readable for revision and ingestion.
+By default, results are written to `proposal.review.txt` next to the proposal, and the path is printed. Existing results are not overwritten. To keep the result elsewhere, run `prop-review proposal.txt /path/to/result.txt`. Interrupting review saves nothing. The file-format values `Approved` and `Comment: "..."` distinguish approvals and comments; comments are quoted/escaped in the file and decoded when read. Review results use only `Approval/Comment:` with an empty value, `Approved`, or `Comment: "..."`; other formats are rejected.
 
 ## Generate and revise (fx or Pi SDK)
 

@@ -871,7 +871,7 @@ func TestReviewMenuEnglish(t *testing.T) {
 }
 
 func TestCommentAndFullwidthKeys(t *testing.T) {
-	items, err := parse(strings.NewReader("変更する\n承認/コメント:\n\n変更しない\n承認/コメント：\n"))
+	items, err := parse(strings.NewReader("変更する\nApproval/Comment:\n\n変更しない\nApproval/Comment:\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -881,7 +881,7 @@ func TestCommentAndFullwidthKeys(t *testing.T) {
 			return key == '\n', err
 		})
 	}
-	// Empty comment cancelled with Esc; then a comment containing the old approval token.
+	// Empty comment cancelled with Esc; then a Japanese comment.
 	if err := review(items, strings.NewReader("ｃ\n\n\x1bc\n承認\nａ\n"), io.Discard, comment); err != nil {
 		t.Fatal(err)
 	}
@@ -891,38 +891,54 @@ func TestCommentAndFullwidthKeys(t *testing.T) {
 	}
 }
 
-func TestLegacyReviewResult(t *testing.T) {
+func TestReviewResultFormats(t *testing.T) {
 	root := t.TempDir()
-	path := filepath.Join(root, "prop-review-tmp", "review.old", "proposal.txt")
+	path := filepath.Join(root, "prop-review-tmp", "review.test", "proposal.txt")
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		t.Fatal(err)
 	}
-	original := "何について：Change settings\n承認/コメント：\n\nKeep data\n承認/コメント:\n\n"
+	original := "Change settings\nApproval/Comment:\n\nKeep data\nApproval/Comment:\n\nPending\nApproval/Comment:\n\n"
 	if err := os.WriteFile(path, []byte(original), 0600); err != nil {
 		t.Fatal(err)
 	}
-	result := "Change settings\n承認/コメント：承認\n\nKeep data\n承認/コメント：コメント：\"keep it\"\n\n"
 	resultPath := filepath.Join(filepath.Dir(path), "proposal.review.txt")
+	result := render([]item{{topic: "Change settings", answer: "Approved"}, {topic: "Keep data", answer: "keep \"it\"", comment: true}, {topic: "Pending"}})
 	if err := os.WriteFile(resultPath, []byte(result), 0600); err != nil {
 		t.Fatal(err)
 	}
 	_, items, err := reviewedProposal(root)
-	if err != nil || len(items) != 2 || items[0].answer != "Approved" || items[1].answer != "keep it" || !items[1].comment {
-		t.Fatalf("legacy review: %+v, %v", items, err)
+	if err != nil || len(items) != 3 || items[0].answer != "Approved" || items[1].answer != "keep \"it\"" || !items[1].comment || items[2].answer != "" {
+		t.Fatalf("review: %+v, %v", items, err)
+	}
+	for _, field := range []string{"承認/コメント：", "承認/コメント:"} {
+		if _, err := parse(strings.NewReader("Change settings\n" + field + "\n")); err == nil {
+			t.Fatalf("accepted old proposal field %q", field)
+		}
+		if err := os.WriteFile(resultPath, []byte(strings.Replace(result, "Approval/Comment:", field, 1)), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := readReviewedProposal(path); err == nil {
+			t.Fatalf("accepted old result field %q", field)
+		}
+	}
+	for _, value := range []string{"承認", "コメント：\"修正\""} {
+		if err := os.WriteFile(resultPath, []byte(strings.Replace(result, "Approval/Comment:Approved", "Approval/Comment:"+value, 1)), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := readReviewedProposal(path); err == nil {
+			t.Fatalf("accepted old result value %q", value)
+		}
 	}
 }
 
 func TestNoImplicitApproval(t *testing.T) {
-	items, err := parse(strings.NewReader("変更する\n承認/コメント：\n"))
+	items, err := parse(strings.NewReader("変更する\nApproval/Comment:\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	comment := func(*bufio.Reader) (string, error) { return "", nil }
 	if err := review(items, strings.NewReader("\n"), io.Discard, comment); err != nil {
 		t.Fatal(err)
-	}
-	if legacy, err := parse(strings.NewReader("何について：変更する\n承認/コメント：\n")); err != nil || legacy[0].topic != "変更する" {
-		t.Fatalf("legacy proposal: %v, %v", legacy, err)
 	}
 	if items[0].answer != "" {
 		t.Fatal("blank answer should remain pending")
