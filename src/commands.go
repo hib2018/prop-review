@@ -33,8 +33,8 @@ func run(args []string) error {
 		return setEngine(args[1])
 	}
 	if len(args) > 0 && (args[0] == "generate" || args[0] == "revise" || args[0] == "issue") {
-		if len(args) != 1 {
-			return errors.New("usage: prop-review generate|revise|issue")
+		if len(args) != 1 && (args[0] != "revise" || len(args) != 2) {
+			return errors.New("usage: prop-review generate|revise [proposal.txt]|issue")
 		}
 		engine, err := selectedEngine()
 		if err != nil {
@@ -43,17 +43,27 @@ func run(args []string) error {
 		if args[0] == "issue" {
 			return generateIssue(engine)
 		}
-		return generate(args[0] == "revise", engine)
+		if args[0] == "revise" && len(args) == 2 {
+			return generate(true, engine, args[1])
+		}
+		return generate(args[0] == "revise", engine, "")
 	}
 	if len(args) > 2 {
-		return errors.New("usage: prop-review [engine|--engine fx|pi|generate|revise|issue|proposal.txt [result.txt]]")
+		return errors.New("usage: prop-review [engine|--engine fx|pi|generate|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
 	}
 	if len(args) == 0 {
-		root, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+		root, err := repoRoot()
 		if err != nil {
-			return fmt.Errorf("cannot find repository root: %w", err)
+			return err
 		}
-		path, err := latestProposal(strings.TrimSpace(string(root)))
+		paths, err := unreviewedProposals(root)
+		if err != nil {
+			return err
+		}
+		if len(paths) == 0 {
+			return errors.New("no unreviewed proposal in prop-review-tmp")
+		}
+		path, err := chooseProposal(paths)
 		if err != nil {
 			return err
 		}
@@ -117,6 +127,52 @@ func run(args []string) error {
 	})
 }
 
+func selectProposal(paths []string, in io.Reader, out io.Writer) (string, error) {
+	for i, path := range paths {
+		f, err := os.Open(path)
+		if err != nil {
+			return "", err
+		}
+		items, parseErr := parse(f)
+		f.Close()
+		if parseErr != nil {
+			return "", fmt.Errorf("%s: %w", path, parseErr)
+		}
+		fmt.Fprintf(out, "%d) %s  %s\n", i+1, path, items[0].topic)
+	}
+	r := bufio.NewReader(in)
+	for {
+		line, err := inputLine(r, out, "Proposal number (q to cancel): ", 32)
+		if err != nil {
+			return "", fmt.Errorf("proposal selection interrupted: %w", err)
+		}
+		if line == "q" {
+			return "", errors.New("proposal selection cancelled")
+		}
+		index, err := strconv.Atoi(line)
+		if err == nil && index > 0 && index <= len(paths) {
+			return paths[index-1], nil
+		}
+		fmt.Fprintln(out, "Select a listed proposal number or q.")
+	}
+}
+
+func chooseProposal(paths []string) (string, error) {
+	if len(paths) == 0 {
+		return "", errors.New("no proposals to select")
+	}
+	if len(paths) == 1 {
+		return paths[0], nil
+	}
+	var selected string
+	err := withRawTTY(func(tty *os.File) error {
+		var selectErr error
+		selected, selectErr = selectProposal(paths, tty, tty)
+		return selectErr
+	})
+	return selected, err
+}
+
 func repoRoot() (string, error) {
 	root, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 	if err != nil {
@@ -125,7 +181,7 @@ func repoRoot() (string, error) {
 	return strings.TrimSpace(string(root)), nil
 }
 
-func generate(revise bool, engine string) error {
+func generate(revise bool, engine, specified string) error {
 	root, err := repoRoot()
 	if err != nil {
 		return err
@@ -134,11 +190,26 @@ func generate(revise bool, engine string) error {
 	var commented, original []item
 	var parent string
 	if revise {
-		path, items, err := reviewedProposal(root)
+		var path string
+		if specified != "" {
+			path, err = resolveRevisionPath(root, specified)
+		} else {
+			var paths []string
+			paths, err = revisableProposals(root)
+			if err == nil {
+				if len(paths) == 0 {
+					return errors.New("no reviewed proposal awaiting revision in prop-review-tmp")
+				}
+				path, err = chooseProposal(paths)
+			}
+		}
 		if err != nil {
 			return err
 		}
-		original = items
+		original, err = readReviewedProposal(path)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
 		parent = path
 		for _, it := range original {
 			if it.comment {

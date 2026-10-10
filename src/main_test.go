@@ -123,7 +123,7 @@ func TestFXAndRevision(t *testing.T) {
 	}
 	countBefore, _ := filepath.Glob(filepath.Join(root, "prop-review-tmp", "review.*"))
 	t.Setenv("FX_OUTPUT", `not-json`)
-	if err := generate(true, "fx"); err == nil {
+	if err := generate(true, "fx", ""); err == nil {
 		t.Fatal("bad fx output should fail")
 	}
 	countAfter, _ := filepath.Glob(filepath.Join(root, "prop-review-tmp", "review.*"))
@@ -132,6 +132,154 @@ func TestFXAndRevision(t *testing.T) {
 	}
 	if out, err := exec.Command("git", "check-ignore", filepath.Join(root, "prop-review-tmp", "probe")).CombinedOutput(); err != nil {
 		t.Fatalf("not ignored: %s: %v", out, err)
+	}
+}
+
+func TestRevisionSelectionAndExplicitPaths(t *testing.T) {
+	config := t.TempDir()
+	t.Setenv("HOME", config)
+	t.Setenv("XDG_CONFIG_HOME", config)
+	root := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", root).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %s: %v", out, err)
+	}
+	bin := t.TempDir()
+	called := filepath.Join(bin, "called")
+	if err := os.WriteFile(filepath.Join(bin, "fx"), []byte("#!/bin/sh\nprintf 'called' > \"$FX_CALLED\"\nprintf '[\"Revised\"]\\n'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("FX_CALLED", called)
+	first, err := saveProposal(root, []item{{topic: "First"}, {topic: "Pending"}, {topic: "Approved"}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := render([]item{{topic: "First", answer: "fix", comment: true}, {topic: "Pending"}, {topic: "Approved", answer: "Approved"}})
+	if err := os.WriteFile(filepath.Join(filepath.Dir(first), "proposal.review.txt"), []byte(result), 0600); err != nil {
+		t.Fatal(err)
+	}
+	second, err := saveProposal(root, []item{{topic: "Second"}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(second), "proposal.review.txt"), []byte(render([]item{{topic: "Second", answer: "fix", comment: true}})), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(cwd)
+
+	paths, err := revisableProposals(root)
+	if err != nil || len(paths) != 2 {
+		t.Fatalf("revisable: %q, %v", paths, err)
+	}
+	var menu strings.Builder
+	chosen, err := selectProposal(paths, strings.NewReader("0\n2\n"), &menu)
+	if err != nil || chosen != paths[1] || !strings.Contains(menu.String(), "First") || !strings.Contains(menu.String(), "Second") {
+		t.Fatalf("selection: %q, %v, %q", chosen, err, menu.String())
+	}
+	if _, err := selectProposal(paths, strings.NewReader("q\n"), io.Discard); err == nil {
+		t.Fatal("cancelled selection should fail")
+	}
+	// Explicit selection revises the first discussion even if another is newer.
+	if err := run([]string{"revise", first}); err != nil {
+		t.Fatal(err)
+	}
+	newPath, err := latestProposal(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, err := os.ReadFile(filepath.Join(filepath.Dir(newPath), "parent.txt"))
+	if err != nil || string(link) != filepath.Base(filepath.Dir(first))+"\n" {
+		t.Fatalf("wrong parent: %q, %v", link, err)
+	}
+	data, err := os.ReadFile(newPath)
+	if err != nil || string(data) != "Revised\nApproval/Comment:\n\nPending\nApproval/Comment:\n\n" {
+		t.Fatalf("wrong revision: %q, %v", data, err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(newPath), "proposal.review.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("revision started review: %v", err)
+	}
+	paths, err = revisableProposals(root)
+	if err != nil || len(paths) != 1 || paths[0] != second {
+		t.Fatalf("already revised discussion offered again: %q, %v", paths, err)
+	}
+	if got, err := chooseProposal(paths); err != nil || got != second {
+		t.Fatalf("single candidate: %q, %v", got, err)
+	}
+	if err := os.Remove(called); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "proposal.txt")
+	if err := os.WriteFile(outside, []byte("Outside\nApproval/Comment:\n\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []string{
+		filepath.Join(root, "missing", "proposal.txt"),
+		outside,
+		filepath.Join(filepath.Dir(second), "proposal.review.txt"),
+		newPath,
+	} {
+		if err := run([]string{"revise", invalid}); err == nil {
+			t.Fatalf("accepted invalid revision %q", invalid)
+		}
+	}
+	if _, err := os.Stat(called); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("invalid revision invoked engine: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(second), "proposal.review.txt"), []byte("Wrong\nApproval/Comment:Approved\n\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	relative, err := filepath.Rel(root, second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"revise", relative}); err == nil {
+		t.Fatal("mismatched result accepted")
+	}
+	if _, err := os.Stat(called); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("mismatched revision invoked engine: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(second), "proposal.review.txt"), []byte(render([]item{{topic: "Second", answer: "fix", comment: true}})), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"revise", relative}); err != nil {
+		t.Fatalf("relative path: %v", err)
+	}
+}
+
+func TestRevisionCandidatesExcludeCompletedAndUnreviewed(t *testing.T) {
+	root := t.TempDir()
+	base := filepath.Join(root, "prop-review-tmp")
+	for _, name := range []string{"review.comment", "review.approved", "review.child", "review.unreviewed"} {
+		dir := filepath.Join(base, name)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "proposal.txt"), []byte("Topic\nApproval/Comment:\n\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, answer := range map[string]item{
+		"review.comment":  {topic: "Topic", answer: "fix", comment: true},
+		"review.approved": {topic: "Topic", answer: "Approved"},
+	} {
+		if err := os.WriteFile(filepath.Join(base, name, "proposal.review.txt"), []byte(render([]item{answer})), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths, err := revisableProposals(root)
+	if err != nil || len(paths) != 1 || filepath.Base(filepath.Dir(paths[0])) != "review.comment" {
+		t.Fatalf("revision candidates: %q, %v", paths, err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "review.child", "parent.txt"), []byte("review.comment\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	paths, err = revisableProposals(root)
+	if err != nil || len(paths) != 0 {
+		t.Fatalf("revised parent still offered: %q, %v", paths, err)
 	}
 }
 
@@ -390,6 +538,50 @@ func TestLatestProposal(t *testing.T) {
 	}
 	if _, err := latestProposal(root); err == nil {
 		t.Fatal("all reviewed should fail")
+	}
+}
+
+func TestUnreviewedProposalSelection(t *testing.T) {
+	root := t.TempDir()
+	base := filepath.Join(root, "prop-review-tmp")
+	when := time.Now()
+	for _, name := range []string{"review.a", "review.b", "review.c"} {
+		dir := filepath.Join(base, name)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(dir, "proposal.txt")
+		if err := os.WriteFile(path, []byte(name+"\nApproval/Comment:\n\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, when, when); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(base, "review.b", "proposal.review.txt"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	paths, err := unreviewedProposals(root)
+	if err != nil || len(paths) != 2 || filepath.Base(filepath.Dir(paths[0])) != "review.c" || filepath.Base(filepath.Dir(paths[1])) != "review.a" {
+		t.Fatalf("unreviewed: %q, %v", paths, err)
+	}
+	var menu strings.Builder
+	chosen, err := selectProposal(paths, strings.NewReader("3\n2\n"), &menu)
+	if err != nil || chosen != paths[1] || !strings.Contains(menu.String(), "review.a") {
+		t.Fatalf("selection: %q, %v, %q", chosen, err, menu.String())
+	}
+	if _, err := selectProposal(paths, strings.NewReader("q\n"), io.Discard); err == nil {
+		t.Fatal("cancelled selection should fail")
+	}
+	if err := os.WriteFile(filepath.Join(base, "review.c", "proposal.review.txt"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	paths, err = unreviewedProposals(root)
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("one unreviewed proposal: %q, %v", paths, err)
+	}
+	if got, err := chooseProposal(paths); err != nil || got != paths[0] {
+		t.Fatalf("single candidate: %q, %v", got, err)
 	}
 }
 
