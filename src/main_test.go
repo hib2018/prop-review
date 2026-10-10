@@ -393,6 +393,48 @@ func TestLatestProposal(t *testing.T) {
 	}
 }
 
+func TestProposalPathsWithGlobCharacters(t *testing.T) {
+	for _, name := range []string{"parent[work]/repo", "repo["} {
+		t.Run(name, func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), name)
+			base := filepath.Join(root, "prop-review-tmp")
+			if err := os.MkdirAll(base, 0700); err != nil {
+				t.Fatal(err)
+			}
+			var pending, reviewed string
+			when := time.Now().Add(-time.Hour)
+			for _, suffix := range []string{"a", "b", "c", "d"} {
+				dir := filepath.Join(base, "review."+suffix)
+				if err := os.Mkdir(dir, 0700); err != nil {
+					t.Fatal(err)
+				}
+				path := filepath.Join(dir, "proposal.txt")
+				if err := os.WriteFile(path, []byte("Test topic\nApproval/Comment:\n\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chtimes(path, when, when); err != nil {
+					t.Fatal(err)
+				}
+				if suffix == "b" || suffix == "d" {
+					if err := os.WriteFile(filepath.Join(dir, "proposal.review.txt"), []byte("Test topic\nApproval/Comment:Approved\n\n"), 0600); err != nil {
+						t.Fatal(err)
+					}
+					reviewed = path
+				} else {
+					pending = path
+				}
+			}
+			if got, err := latestProposal(root); err != nil || got != pending {
+				t.Fatalf("latest: %q, %v; want %q", got, err, pending)
+			}
+			got, items, err := reviewedProposal(root)
+			if err != nil || got != reviewed || len(items) != 1 || items[0].answer != "Approved" {
+				t.Fatalf("reviewed: %q, %+v, %v; want %q", got, items, err, reviewed)
+			}
+		})
+	}
+}
+
 func TestReview(t *testing.T) {
 	items, err := parse(strings.NewReader("Change settings\nApproval/Comment:\n\nKeep data\nApproval/Comment:\n"))
 	if err != nil {

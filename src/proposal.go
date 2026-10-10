@@ -70,8 +70,37 @@ func render(items []item) string {
 	return b.String()
 }
 
+func proposalPaths(root string) ([]string, error) {
+	base := filepath.Join(root, "prop-review-tmp")
+	entries, err := os.ReadDir(base)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "review.") {
+			continue
+		}
+		path := filepath.Join(base, entry.Name(), "proposal.txt")
+		info, err := os.Stat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !info.IsDir() {
+			paths = append(paths, path)
+		}
+	}
+	return paths, nil
+}
+
 func latestProposal(root string) (string, error) {
-	paths, err := filepath.Glob(filepath.Join(root, "prop-review-tmp", "review.*", "proposal.txt"))
+	paths, err := proposalPaths(root)
 	if err != nil {
 		return "", err
 	}
@@ -86,9 +115,6 @@ func latestProposal(root string) (string, error) {
 		info, err := os.Stat(path)
 		if err != nil {
 			return "", err
-		}
-		if info.IsDir() {
-			continue
 		}
 		if time := info.ModTime().UnixNano(); latest == "" || time > latestTime || time == latestTime && path > latest {
 			latest, latestTime = path, time
@@ -154,7 +180,7 @@ func saveProposal(root string, items []item, parent string) (string, error) {
 }
 
 func reviewedProposal(root string) (string, []item, error) {
-	paths, err := filepath.Glob(filepath.Join(root, "prop-review-tmp", "review.*", "proposal.txt"))
+	paths, err := proposalPaths(root)
 	if err != nil {
 		return "", nil, err
 	}
