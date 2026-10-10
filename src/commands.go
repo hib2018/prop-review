@@ -15,6 +15,16 @@ import (
 )
 
 func run(args []string) error {
+	if len(args) > 0 && args[0] == "delete" {
+		if len(args) != 1 {
+			return errors.New("usage: prop-review delete")
+		}
+		root, err := repoRoot()
+		if err != nil {
+			return err
+		}
+		return withRawTTY(func(tty *os.File) error { return deleteProposal(root, tty, tty) })
+	}
 	if len(args) > 0 && args[0] == "engine" {
 		if len(args) != 1 {
 			return errors.New("usage: prop-review engine")
@@ -49,7 +59,7 @@ func run(args []string) error {
 		return generate(args[0] == "revise", engine, "")
 	}
 	if len(args) > 2 {
-		return errors.New("usage: prop-review [engine|--engine fx|pi|generate|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
+		return errors.New("usage: prop-review [delete|engine|--engine fx|pi|generate|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
 	}
 	if len(args) == 0 {
 		root, err := repoRoot()
@@ -138,7 +148,13 @@ func selectProposal(paths []string, in io.Reader, out io.Writer) (string, error)
 		if parseErr != nil {
 			return "", fmt.Errorf("%s: %w", path, parseErr)
 		}
-		fmt.Fprintf(out, "%d) %s  %s\n", i+1, path, items[0].topic)
+		status := "unreviewed"
+		if _, err := os.Stat(filepath.Join(filepath.Dir(path), "proposal.review.txt")); err == nil {
+			status = "awaiting revision"
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		fmt.Fprintf(out, "%d) [%s] %s  %s\n", i+1, status, path, items[0].topic)
 	}
 	r := bufio.NewReader(in)
 	for {

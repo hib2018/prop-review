@@ -53,6 +53,14 @@ Enter `a` then Enter to approve, `c` then Enter to enter a comment, Enter alone 
 
 By default, results are written to `proposal.review.txt` next to the proposal, and the path is printed. Existing results are not overwritten. To keep the result elsewhere, run `prop-review proposal.txt /path/to/result.txt`. Interrupting review saves nothing. The file-format values `Approved` and `Comment: "..."` distinguish approvals and comments; comments are quoted/escaped in the file and decoded when read. Review results use only `Approval/Comment:` with an empty value, `Approved`, or `Comment: "..."`; other formats are rejected.
 
+## Delete abandoned proposals
+
+```sh
+prop-review delete
+```
+
+This lists unreviewed proposals (no adjacent `proposal.review.txt`) and reviewed proposals awaiting revision (comments, no child revision) in the current repository. Choose a number or `q` to cancel. Before deletion, it shows the full proposal and, when present, the review including **approved items**; type `delete` to confirm. Anything else or interrupted input deletes nothing. Reviews referenced by another proposal's `parent.txt` are protected. Links and unexpected files in a candidate directory are refused. This permanently removes the selected `review.*` directory and its proposal, adjacent review result, and `parent.txt` if present; it does not remove other discussions.
+
 ## Generate and revise (fx or Pi SDK)
 
 For fx, install and authenticate the `fx` CLI. For Pi, install Node.js and the global npm package `@earendil-works/pi-coding-agent` and configure its credentials and model. Pi generation uses its SDK, **not** the `pi` CLI. The selected engine is a user-wide setting shared across repositories (fx by default). Neither libfx nor a direct model API integration is used.
