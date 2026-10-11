@@ -20,7 +20,7 @@ func TestAdditionalEngines(t *testing.T) {
 	for name, script := range map[string]string{
 		"claude":   "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGS\"\ncat > \"$INPUT\"\nprintf '%s\\n' '[\"Claude案\"]'\n",
 		"codex":    "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGS\"\ncat > \"$INPUT\"\nprev=''\nfor arg do if [ \"$prev\" = '--output-last-message' ]; then printf '%s\\n' '[\"Codex案\"]' > \"$arg\"; fi; prev=$arg; done\n",
-		"gemini":   "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGS\"\ncat > \"$INPUT\"\nprintf '%s\\n' '{\"response\":\"[\\\"Gemini案\\\"]\"}'\n",
+		"agy":      "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGS\"\ncat > \"$INPUT\"\nprintf '%s\\n' '[\"Antigravity案\"]'\n",
 		"opencode": "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGS\"\nprintf '%s' \"$OPENCODE_CONFIG_CONTENT\" > \"$INPUT\"\nprintf '%s\\n' '{\"type\":\"step_start\"}' '{\"type\":\"text\",\"part\":{\"type\":\"text\",\"messageID\":\"last\",\"text\":\"[\\\"OpenCode案\\\"]\"}}'\n",
 	} {
 		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0700); err != nil {
@@ -33,7 +33,7 @@ func TestAdditionalEngines(t *testing.T) {
 	}{
 		{"claude", "Claude案", []string{"--print", "--restricted", "--tools", "Read,Glob,Grep", "--no-session-persistence"}},
 		{"codex", "Codex案", []string{"exec", "--sandbox", "read-only", "--ephemeral", "--output-last-message"}},
-		{"gemini", "Gemini案", []string{"--approval-mode", "plan", "--output-format", "json"}},
+		{"agy", "Antigravity案", []string{"--print", "--mode", "plan", "--sandbox", "--disable-slash-commands", "--output-format", "text"}},
 		{"opencode", "OpenCode案", []string{"run", "--standalone", "--agent", "prop-review", "--format", "json", "prompt"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -70,6 +70,9 @@ func TestAdditionalEngines(t *testing.T) {
 				t.Errorf("stdin: %q", inputData)
 			}
 		})
+	}
+	if err := setEngine("gemini"); err == nil {
+		t.Fatal("obsolete gemini engine is still selectable")
 	}
 	if _, err := proposalsWithTimeout(t.TempDir(), strings.Repeat("x", 100001), "opencode", time.Second, os.Stderr); err == nil {
 		t.Fatal("accepted oversized opencode argument")

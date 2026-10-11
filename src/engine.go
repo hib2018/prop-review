@@ -45,7 +45,7 @@ func selectedEngine() (string, error) {
 
 func setEngine(engine string) error {
 	if !validEngine(engine) {
-		return errors.New("usage: prop-review --engine fx|pi|claude|codex|gemini|opencode")
+		return errors.New("usage: prop-review --engine fx|pi|claude|codex|agy|opencode")
 	}
 	path, err := enginePath()
 	if err != nil {
@@ -75,7 +75,7 @@ func setEngine(engine string) error {
 
 func validEngine(engine string) bool {
 	switch engine {
-	case "fx", "pi", "claude", "codex", "gemini", "opencode":
+	case "fx", "pi", "claude", "codex", "agy", "opencode":
 		return true
 	}
 	return false
@@ -151,8 +151,8 @@ func proposalsWithTimeout(root, prompt, engine string, timeout time.Duration, pr
 		defer os.Remove(resultFile)
 		cmd = exec.CommandContext(ctx, "codex", "exec", "--sandbox", "read-only", "--ephemeral", "-c", `approval_policy="never"`, "--output-last-message", resultFile, "-")
 		cmd.Stdin = strings.NewReader(prompt)
-	case "gemini":
-		cmd = exec.CommandContext(ctx, "gemini", "--approval-mode", "plan", "--output-format", "json")
+	case "agy":
+		cmd = exec.CommandContext(ctx, "agy", "--print", "--mode", "plan", "--sandbox", "--disable-slash-commands", "--output-format", "text")
 		cmd.Stdin = strings.NewReader(prompt)
 	case "opencode":
 		// OpenCode accepts its prompt as an argument, unlike the other engines.
@@ -181,15 +181,6 @@ func proposalsWithTimeout(root, prompt, engine string, timeout time.Duration, pr
 		if err != nil {
 			return nil, fmt.Errorf("read codex response: %w", err)
 		}
-	case "gemini":
-		var response struct {
-			Response string          `json:"response"`
-			Error    json.RawMessage `json:"error"`
-		}
-		if err := json.Unmarshal(output, &response); err != nil || response.Response == "" || len(response.Error) > 0 && string(response.Error) != "null" {
-			return nil, errors.New("invalid gemini response")
-		}
-		output = []byte(response.Response)
 	case "opencode":
 		output, err = opencodeResponse(output)
 		if err != nil {
