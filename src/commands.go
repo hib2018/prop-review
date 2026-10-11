@@ -38,7 +38,7 @@ func run(args []string) error {
 	}
 	if len(args) > 0 && args[0] == "--engine" {
 		if len(args) != 2 {
-			return errors.New("usage: prop-review --engine fx|pi")
+			return errors.New("usage: prop-review --engine fx|pi|claude|codex|gemini|opencode")
 		}
 		return setEngine(args[1])
 	}
@@ -59,7 +59,7 @@ func run(args []string) error {
 		return generate(args[0] == "revise", engine, "")
 	}
 	if len(args) > 2 {
-		return errors.New("usage: prop-review [delete|engine|--engine fx|pi|generate|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
+		return errors.New("usage: prop-review [delete|engine|--engine fx|pi|claude|codex|gemini|opencode|generate|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
 	}
 	if len(args) == 0 {
 		root, err := repoRoot()
