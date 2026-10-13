@@ -225,6 +225,7 @@ func generate(revise bool, engine, specified string) error {
 			paths, err = revisableProposals(root)
 			if err == nil {
 				if len(paths) == 0 {
+					fmt.Fprintln(os.Stderr, "Recommended: if pending items remain, review them again; `revise` only changes commented items.")
 					return errors.New("no reviewed proposal awaiting revision in prop-review-tmp")
 				}
 				path, err = chooseProposal(paths)
@@ -237,12 +238,20 @@ func generate(revise bool, engine, specified string) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", path, err)
 		}
+		hasPending := false
+		for _, it := range original {
+			if it.answer == "" {
+				hasPending = true
+				break
+			}
+		}
 		parent = path
 		for _, it := range original {
 			if it.comment {
 				commented = append(commented, it)
 			}
 		}
+		revisePendingAdvice(hasPending, len(commented) > 0, os.Stderr)
 		if len(commented) == 0 {
 			return errors.New("no commented proposals to revise")
 		}
@@ -294,6 +303,17 @@ func generate(revise bool, engine, specified string) error {
 		items = merged
 	}
 	return saveAndReview(root, items, parent, request, !revise)
+}
+
+func revisePendingAdvice(pending, commented bool, out io.Writer) {
+	if !pending {
+		return
+	}
+	if !commented {
+		fmt.Fprintln(out, "Recommended: review pending items again; `revise` only changes commented items.")
+		return
+	}
+	fmt.Fprintln(out, "Recommended: review pending items again in the revised proposal (`prop-review <proposal.txt>`).")
 }
 
 func saveAndReview(root string, items []item, parent, request string, openReview bool) error {

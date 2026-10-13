@@ -298,6 +298,28 @@ func clarificationQuestions(root, selected, engine string) ([]item, string, erro
 	return outstanding, history[len(history)-1].path, nil
 }
 
+func clarificationAdvice(history []reviewStep, out io.Writer) {
+	// Only the current leaf's comments are directly revisable.
+	for _, it := range history[len(history)-1].items {
+		if it.comment {
+			fmt.Fprintln(out, "Recommended: run `prop-review revise` to address commented items before clarifying.")
+			break
+		}
+	}
+	pending := make(map[string]bool)
+	for _, step := range history {
+		for _, it := range step.items {
+			pending[it.topic] = it.answer == ""
+		}
+	}
+	for _, open := range pending {
+		if open {
+			fmt.Fprintln(out, "Recommended: review pending items again in the new proposal.")
+			break
+		}
+	}
+}
+
 func clarify(engine string) error {
 	root, err := repoRoot()
 	if err != nil {
@@ -319,6 +341,11 @@ func clarify(engine string) error {
 	if err != nil {
 		return err
 	}
+	history, _, err := clarificationHistory(root, selected)
+	if err != nil {
+		return err
+	}
+	clarificationAdvice(history, os.Stderr)
 	items, parent, err := clarificationQuestions(root, selected, engine)
 	if err != nil {
 		return err
