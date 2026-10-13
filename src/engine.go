@@ -105,14 +105,14 @@ func proposalsWithLimit(root, prompt, engine string, timeout time.Duration, prog
 		defer close(finished)
 		ticker := time.NewTicker(150 * time.Millisecond)
 		defer ticker.Stop()
-		frames := `|/-\`
+		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 		frame := 0
-		fmt.Fprintf(progress, "Waiting for %s %c", engine, frames[frame])
+		fmt.Fprintf(progress, "%c Generating proposals with %s...", frames[frame], engine)
 		for {
 			select {
 			case <-ticker.C:
 				frame = (frame + 1) % len(frames)
-				fmt.Fprintf(progress, "\rWaiting for %s %c", engine, frames[frame])
+				fmt.Fprintf(progress, "\r%c Generating proposals with %s...", frames[frame], engine)
 			case <-done:
 				fmt.Fprintln(progress)
 				return
