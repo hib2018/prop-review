@@ -136,7 +136,11 @@ func TestClarificationNoQuestionsAndInvalidHistory(t *testing.T) {
 	if err := os.Remove(filepath.Join(filepath.Dir(original), "request.txt")); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := clarificationQuestions(root, original, "fx"); err == nil || !strings.Contains(err.Error(), "legacy") {
+	var menu strings.Builder
+	if _, err := selectClarificationRoot([]string{original}, strings.NewReader("1\n"), &menu); err != nil || !strings.Contains(menu.String(), "invalid: missing request.txt") {
+		t.Fatalf("missing request menu: %q, %v", menu.String(), err)
+	}
+	if _, _, err := clarificationQuestions(root, original, "fx"); err == nil || !strings.Contains(err.Error(), "invalid root: missing request.txt") {
 		t.Fatalf("missing request: %v", err)
 	}
 }

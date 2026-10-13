@@ -67,7 +67,7 @@ func selectClarificationRoot(paths []string, in io.Reader, out io.Writer) (strin
 	for i, path := range paths {
 		request, err := localFile(filepath.Join(filepath.Dir(path), "request.txt"))
 		if errors.Is(err, os.ErrNotExist) {
-			request = []byte("(依頼文なし・旧形式)")
+			request = []byte("invalid: missing request.txt")
 		} else if err != nil {
 			return "", err
 		}
@@ -185,7 +185,7 @@ func clarificationHistory(root, selected string) ([]reviewStep, string, error) {
 	}
 	request, err := localFile(filepath.Join(filepath.Dir(selected), "request.txt"))
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, "", errors.New("root request/title was not saved (legacy proposal); cannot clarify")
+		return nil, "", errors.New("invalid root: missing request.txt")
 	}
 	if err != nil {
 		return nil, "", err
