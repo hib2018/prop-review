@@ -500,8 +500,16 @@ func TestEngineTimeout(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "timed out") || !errors.Is(err, context.DeadlineExceeded) || len(items) != 0 {
 		t.Fatalf("timeout: %v, %v", items, err)
 	}
-	if time.Since(start) > 2500*time.Millisecond || !strings.Contains(progress.String(), "1s") {
+	if time.Since(start) > 2500*time.Millisecond || !strings.HasPrefix(progress.String(), "Waiting for fx |") || !strings.Contains(progress.String(), "\rWaiting for fx /") || !strings.HasSuffix(progress.String(), "\n") || strings.Contains(progress.String(), "1s") {
 		t.Fatalf("elapsed: %s, progress: %q", time.Since(start), progress.String())
+	}
+	if err := os.WriteFile(filepath.Join(bin, "fx"), []byte("#!/bin/sh\nprintf '[\"Ready\"]\\n'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	progress.Reset()
+	items, err = proposalsWithTimeout(t.TempDir(), "prompt", "fx", time.Second, &progress)
+	if err != nil || len(items) != 1 || !strings.HasPrefix(progress.String(), "Waiting for fx |") || !strings.HasSuffix(progress.String(), "\n") {
+		t.Fatalf("fast completion: %v, %v, %q", items, err, progress.String())
 	}
 }
 

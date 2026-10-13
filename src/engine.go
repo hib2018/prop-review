@@ -99,23 +99,22 @@ func proposalsWithLimit(root, prompt, engine string, timeout time.Duration, prog
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	start := time.Now()
 	done := make(chan struct{})
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
-		ticker := time.NewTicker(time.Second)
+		ticker := time.NewTicker(150 * time.Millisecond)
 		defer ticker.Stop()
-		shown := false
+		frames := `|/-\`
+		frame := 0
+		fmt.Fprintf(progress, "Waiting for %s %c", engine, frames[frame])
 		for {
 			select {
 			case <-ticker.C:
-				fmt.Fprintf(progress, "\r%ds", int(time.Since(start).Seconds()))
-				shown = true
+				frame = (frame + 1) % len(frames)
+				fmt.Fprintf(progress, "\rWaiting for %s %c", engine, frames[frame])
 			case <-done:
-				if shown {
-					fmt.Fprintln(progress)
-				}
+				fmt.Fprintln(progress)
 				return
 			}
 		}
