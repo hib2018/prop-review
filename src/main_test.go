@@ -139,6 +139,9 @@ func TestRevisionSelectionAndExplicitPaths(t *testing.T) {
 	config := t.TempDir()
 	t.Setenv("HOME", config)
 	t.Setenv("XDG_CONFIG_HOME", config)
+	if err := setEngine("fx"); err != nil {
+		t.Fatal(err)
+	}
 	root := t.TempDir()
 	if out, err := exec.Command("git", "init", "-q", root).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %s: %v", out, err)
@@ -352,7 +355,7 @@ func TestEngineStatus(t *testing.T) {
 			t.Fatalf("engine status: %q, %v, %v", output, err, readErr)
 		}
 	}
-	check("fx")
+	check("pi")
 	if _, err := os.Stat(mustEnginePath(t)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("status should not create a setting: %v", err)
 	}
@@ -375,7 +378,7 @@ func TestPiEngine(t *testing.T) {
 	config := t.TempDir()
 	t.Setenv("HOME", config)
 	t.Setenv("XDG_CONFIG_HOME", config)
-	if got, err := selectedEngine(); err != nil || got != "fx" {
+	if got, err := selectedEngine(); err != nil || got != "pi" {
 		t.Fatalf("default engine: %q, %v", got, err)
 	}
 	if err := run([]string{"--engine", "pi"}); err != nil {

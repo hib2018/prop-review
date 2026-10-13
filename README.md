@@ -63,10 +63,10 @@ This lists unreviewed proposals (no adjacent `proposal.review.txt`) and reviewed
 
 ## Generate and revise
 
-For fx, install and authenticate the `fx` CLI. For Pi, install Node.js and the global npm package `@earendil-works/pi-coding-agent` and configure its credentials and model. Pi generation uses its SDK, **not** the `pi` CLI. Alternatively install and authenticate the `claude`, `codex`, `agy` (Antigravity CLI), or `opencode` CLI. The selected engine is a user-wide setting shared across repositories (fx by default). Neither libfx nor a direct model API integration is used.
+For fx, install and authenticate the `fx` CLI. For Pi, install Node.js and the global npm package `@earendil-works/pi-coding-agent` and configure its credentials and model. Pi generation uses its SDK, **not** the `pi` CLI. Alternatively install and authenticate the `claude`, `codex`, `agy` (Antigravity CLI), or `opencode` CLI. The selected engine is a user-wide setting shared across repositories (Pi by default). Neither libfx nor a direct model API integration is used.
 
 ```sh
-prop-review engine       # Show current engine (fx by default; does not change settings)
+prop-review engine       # Show current engine (Pi by default; does not change settings)
 prop-review --engine pi  # Also accepts fx, claude, codex, agy, opencode
 prop-review generate     # Enter a request, generate proposals, then review
 prop-review issue        # Select an open GitHub issue, generate proposals, then review

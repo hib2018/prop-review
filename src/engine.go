@@ -31,7 +31,7 @@ func selectedEngine() (string, error) {
 	}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return "fx", nil
+		return "pi", nil
 	}
 	if err != nil {
 		return "", err
