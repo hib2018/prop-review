@@ -90,6 +90,10 @@ func proposals(root, prompt, engine string) ([]item, error) {
 }
 
 func proposalsWithTimeout(root, prompt, engine string, timeout time.Duration, progress io.Writer) ([]item, error) {
+	return proposalsWithLimit(root, prompt, engine, timeout, progress, false)
+}
+
+func proposalsWithLimit(root, prompt, engine string, timeout time.Duration, progress io.Writer, allowEmpty bool) ([]item, error) {
 	if !validEngine(engine) {
 		return nil, fmt.Errorf("unknown engine: %s", engine)
 	}
@@ -191,7 +195,7 @@ func proposalsWithTimeout(root, prompt, engine string, timeout time.Duration, pr
 	if err := json.Unmarshal(output, &topics); err != nil {
 		return nil, fmt.Errorf("invalid %s JSON: %w", engine, err)
 	}
-	if len(topics) < 1 || len(topics) > 10 {
+	if len(topics) > 10 || len(topics) == 0 && (!allowEmpty || strings.TrimSpace(string(output)) != "[]") {
 		return nil, fmt.Errorf("%s must return 1–10 proposals", engine)
 	}
 	items := make([]item, 0, len(topics))

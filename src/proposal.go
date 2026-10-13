@@ -155,6 +155,10 @@ func latestProposal(root string) (string, error) {
 }
 
 func saveProposal(root string, items []item, parent string) (string, error) {
+	return saveProposalWithMetadata(root, items, parent, "", false)
+}
+
+func saveProposalWithMetadata(root string, items []item, parent, request string, followup bool) (string, error) {
 	base := filepath.Join(root, "prop-review-tmp")
 	if err := os.MkdirAll(base, 0700); err != nil {
 		return "", err
@@ -195,6 +199,26 @@ func saveProposal(root string, items []item, parent string) (string, error) {
 			return "", errors.New("invalid parent proposal path")
 		}
 		if err := os.WriteFile(filepath.Join(dir, "parent.txt"), []byte(name+"\n"), 0600); err != nil {
+			os.RemoveAll(dir)
+			return "", err
+		}
+	}
+	if request != "" {
+		if parent != "" {
+			os.RemoveAll(dir)
+			return "", errors.New("request belongs to a root proposal")
+		}
+		if err := os.WriteFile(filepath.Join(dir, "request.txt"), []byte(request), 0600); err != nil {
+			os.RemoveAll(dir)
+			return "", err
+		}
+	}
+	if followup {
+		if parent == "" {
+			os.RemoveAll(dir)
+			return "", errors.New("followup needs a parent")
+		}
+		if err := os.WriteFile(filepath.Join(dir, "followup.txt"), []byte("followup\n"), 0600); err != nil {
 			os.RemoveAll(dir)
 			return "", err
 		}
