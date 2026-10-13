@@ -10,6 +10,7 @@ import (
 
 func TestAdditionalEngines(t *testing.T) {
 	config := t.TempDir()
+	t.Setenv("HOME", config)
 	t.Setenv("XDG_CONFIG_HOME", config)
 	bin := t.TempDir()
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
