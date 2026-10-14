@@ -1,5 +1,7 @@
 # prop-review
 
+[日本語版 README](README.ja.md)
+
 A local CLI for reviewing proposals item by item. It is separate from zintent's intent-approval gate. Source code lives in `src/`. CLI UI text is in English; proposal topics follow the request's language.
 
 ## Install (available in any repository)
