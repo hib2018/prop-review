@@ -29,17 +29,86 @@ for skill in prop-review prop-review-ingest; do
 done
 ```
 
-Existing destinations are not overwritten. Check their targets if necessary. Run `/reload` if Pi is already open.
+Existing links are not overwritten. Run `/reload` if Pi is already open. Re-run `go build` after updating the CLI source.
 
-## Review
+## Commands
+
+Run inside a Git repository. `generate`, `issue`, `revise`, `clarify`, and `spec` use its `prop-review-tmp/` directory.
+
+### `prop-review` / `prop-review proposal.txt [result.txt]`
+
+Opens the only unreviewed proposal, or lists unreviewed proposals to select from. You can specify a file instead:
 
 ```sh
 prop-review
+prop-review prop-review-tmp/review.123/proposal.txt
+prop-review proposal.txt /path/to/result.txt
 ```
 
-From any directory inside a Git repository, this opens the only unreviewed `prop-review-tmp/review.*/proposal.txt` under the repository root, or lists unreviewed proposals for you to select when there are several. The list is ordered by proposal modification time (then path, descending). Enter a listed number or `q` to cancel. You can also supply a path: `prop-review proposal.txt`. Earlier proposals and results are never overwritten or deleted. `generate` and `revise` create a unique directory and add `/prop-review-tmp/` to the repository's local Git `info/exclude` if needed; plain review does not change Git settings.
+Enter `a` then Enter to approve, `c` then Enter to comment, Enter alone to leave unconfirmed, `b` then Enter to go back, or `q` then Enter to quit without saving. Fullwidth Latin keys work too. An empty comment warns that the item remains unconfirmed (Enter to confirm, Esc to return). Request and comment entry support Left/Right, Home/End, and Backspace; comments are limited to 1 MiB. Results go beside the proposal as `proposal.review.txt` by default and their path is printed. Existing results are never overwritten. A custom result path works for review, but cannot be used in `revise` or `spec` history.
 
-The proposal format has two lines per item, with an empty review field; generated files separate items with a blank line. `Approval/Comment:` is a fixed file-format token, not UI language; proposal text can be in the request's language. These are illustrative proposals, not built-in actions:
+### `prop-review generate`
+
+```sh
+prop-review generate
+```
+
+Enter a request to generate proposals and begin reviewing immediately. Requests accept up to 256 KiB of UTF-8, with surrounding whitespace trimmed. The root's `request.txt` stores the request. If review is cancelled, the generated unreviewed proposal remains.
+
+### `prop-review issue`
+
+```sh
+prop-review issue
+```
+
+Select an open issue in a GitHub repository recognized by an authenticated `gh` CLI, generate proposals, and review them. The menu shows the first 30 issues by default (`gh issue list`). The engine receives the title, body, number, and URL; the title is stored in `request.txt`. Issue JSON larger than 256 KiB is rejected. The issue itself is not changed.
+
+### `prop-review revise [proposal.txt]`
+
+```sh
+prop-review revise
+prop-review revise prop-review-tmp/review.123/proposal.txt
+prop-review  # Review the revision separately
+```
+
+Select a reviewed proposal with comments, or specify a proposal in the same repository. Only commented items are revised; pending items are carried forward unchanged, while approvals remain in the earlier review. A new `review.*` directory links back via `parent.txt`. **Revision does not start review automatically.** Pending-only reviews cannot be revised. Missing or mismatched adjacent results are rejected.
+
+### `prop-review clarify`
+
+```sh
+prop-review clarify
+```
+
+Select a root request or issue title, validate that chain's approved, pending, and commented review history, and look for additional questions. Pending items carry forward. When questions remain, the CLI creates a linked proposal with `followup.txt` and `parent.txt` and starts review; when none remain, it saves nothing. Legacy roots without `request.txt`, missing or invalid results, and ambiguous histories fail. It recommends `revise` for comments and another review for pending items.
+
+### `prop-review spec`
+
+```sh
+prop-review spec
+```
+
+Without a selection, validate **all reviewed chains** in this repository and collect only approved items into one `prop-review-tmp/spec.md`. Even when additional or pending questions remain, the file is saved and `prop-review clarify` is recommended. Legacy roots lacking `request.txt` produce a warning because they cannot be clarified. An existing `spec.md` is never overwritten; invalid history prevents saving. This does not start implementation or another review.
+
+### `prop-review delete`
+
+```sh
+prop-review delete
+```
+
+Choose among unreviewed proposals and reviewed proposals with comments but no child revision. Before deleting, the CLI displays the complete proposal and review (including approved items); type `delete` to confirm. Any other input cancels. Directories referenced by `parent.txt`, or candidates with links or unexpected files, are refused. Confirmation **permanently deletes** the selected `review.*` directory.
+
+### `prop-review engine` / `prop-review --engine NAME`
+
+```sh
+prop-review engine       # Print current engine
+prop-review --engine pi  # Also accepts fx, claude, codex, agy, opencode
+```
+
+The engine setting is per user (`prop-review/engine` in the OS user config directory), defaults to `pi`, and applies across repositories. Install and authenticate the chosen CLI. Pi uses Node.js and the global npm package `@earendil-works/pi-coding-agent` via its SDK, not the `pi` CLI.
+
+## File format and review history
+
+`proposal.txt` contains a single-line topic followed by an empty `Approval/Comment:` field for each item. Topics follow the request's language. Example (not built-in commands):
 
 ```text
 Add a command to export the current settings
@@ -49,47 +118,14 @@ Document how to restore a saved review
 Approval/Comment:
 ```
 
-Only the `Approval/Comment:` field is accepted in proposals; topic text is not interpreted as a format prefix. Proposal topics must be nonempty single lines without invalid UTF-8, the replacement character `�`, or control characters.
+Result fields accept only an empty value (pending), `Approved`, or `Comment: "..."` with Go-style quoting/escaping. Topics must be nonempty single lines; invalid UTF-8, the replacement character `�`, and control characters are rejected. `parent.txt` records the previous `review.*` directory name; `followup.txt` marks a clarification proposal. Unlinked old revisions are not assumed to belong to the same chain.
 
-Enter `a` then Enter to approve, `c` then Enter to enter a comment, Enter alone to leave an item unconfirmed, `b` then Enter to go back, or `q` then Enter to quit without saving. Fullwidth Latin letter keys also work. Each menu choice is confirmed with Enter so its newline cannot skip the next item. Request and comment input support Left/Right, Home/End, and Backspace (including multibyte characters). Comments accept up to 1 MiB of UTF-8 text; exceeding the limit rejects that entry instead of silently truncating it. If a comment is empty, the CLI warns that it leaves the item unconfirmed (Enter to confirm, Esc to go back).
+`generate` and `revise` create unique `review.*` directories and add `/prop-review-tmp/` to local Git `info/exclude` if necessary. Reviewing alone does not change Git settings. Local review files may contain private requests and comments.
 
-By default, results are written to `proposal.review.txt` next to the proposal, and the path is printed. Existing results are not overwritten. To keep the result elsewhere, run `prop-review proposal.txt /path/to/result.txt`. Interrupting review saves nothing. The file-format values `Approved` and `Comment: "..."` distinguish approvals and comments; comments are quoted/escaped in the file and decoded when read. Review results use only `Approval/Comment:` with an empty value, `Approved`, or `Comment: "..."`; other formats are rejected.
+## Engines and failures
 
-## Delete abandoned proposals
+Engines are asked to read the repository and propose changes, not implement them. Responses are validated as JSON arrays of 1–10 single-line proposals; only `clarify` also allows an empty array. Language is not programmatically validated. An activity-specific spinner is shown on stderr, with a 100-second timeout. Invalid responses, failures, and cancelled input never overwrite earlier files.
 
-```sh
-prop-review delete
-```
+Pi uses a read-only session with extensions, skills, and prompt templates disabled; Claude uses restricted mode with Read/Glob/Grep; Codex uses a read-only sandbox; `agy` uses plan mode and terminal sandboxing; OpenCode uses a dedicated agent restricted to read/glob/grep. `agy` may save local session data. OpenCode passes prompts as command arguments and rejects those over 100,000 bytes. Instructions to `fx ask --no-save` cannot enforce tool permissions. Local settings, hooks, and plugins of external CLIs may have side effects.
 
-This lists unreviewed proposals (no adjacent `proposal.review.txt`) and reviewed proposals awaiting revision (comments, no child revision) in the current repository. Choose a number or `q` to cancel. Before deletion, it shows the full proposal and, when present, the review including **approved items**; type `delete` to confirm. Anything else or interrupted input deletes nothing. Reviews referenced by another proposal's `parent.txt` are protected. Links and unexpected files in a candidate directory are refused. This permanently removes the selected `review.*` directory and its proposal, adjacent review result, and `parent.txt` if present; it does not remove other discussions.
-
-## Generate and revise
-
-For fx, install and authenticate the `fx` CLI. For Pi, install Node.js and the global npm package `@earendil-works/pi-coding-agent` and configure its credentials and model. Pi generation uses its SDK, **not** the `pi` CLI. Alternatively install and authenticate the `claude`, `codex`, `agy` (Antigravity CLI), or `opencode` CLI. The selected engine is a user-wide setting shared across repositories (Pi by default). Neither libfx nor a direct model API integration is used.
-
-```sh
-prop-review engine       # Show current engine (Pi by default; does not change settings)
-prop-review --engine pi  # Also accepts fx, claude, codex, agy, opencode
-prop-review generate     # Enter a request, generate proposals, then review
-prop-review issue        # Select an open GitHub issue, generate proposals, then review
-prop-review clarify      # Select a root request/title and review additional questions
-prop-review spec         # Save approved items across all review chains in one specification
-prop-review revise       # Select from reviewed proposals awaiting revision; save a new proposal.txt
-prop-review revise prop-review-tmp/review.123/proposal.txt  # Or specify one directly
-prop-review              # Review the revised proposal
-prop-review --engine fx  # Switch back to fx
-```
-
-The engine setting is stored at `prop-review/engine` in the OS user config directory (`os.UserConfigDir()`). Run `generate` and `revise` in a repository terminal.
-
-New `generate` roots save the exact request as `request.txt`; new `issue` roots save the issue title there. Roots without `request.txt` cannot be reconstructed or clarified; the selection list marks them invalid. This says nothing about the review-result format. This local review data can contain private requests; `prop-review-tmp/` is excluded from Git by default. `issue` requires an installed, authenticated `gh` CLI and a GitHub repository recognized by `gh`. It lists the first 30 open issues (the `gh issue list` default), prompts for a listed issue number in the terminal (`q` cancels), and sends its title, body, number and URL to the selected engine. Issues outside that list are not selectable. Oversized issue data (>256 KiB as JSON) is rejected. Issue text is treated as untrusted input; no issue is changed by the CLI. As with `generate`, a successful generation creates a new proposal and starts review.
-
-Engines are prompted to inspect the repository and propose changes, not implement them. The initial request accepts up to 256 KiB of UTF-8 text; leading/trailing whitespace is trimmed. Engines are instructed to use the request's language for new proposals and the original topics' language for revisions, even if comments are in another language; language is not programmatically validated. Pi uses an in-memory session with extensions, skills, and prompt templates disabled, and only read-only tools. Claude uses restricted mode with only Read/Glob/Grep and no session persistence. Codex uses a read-only sandbox and ephemeral session. Antigravity (`agy`) runs non-interactively in plan mode with terminal sandboxing and slash commands disabled; it may still write its own local session data. It does not use the standalone `gemini` CLI. Existing `gemini` selections must be changed with `prop-review --engine agy`. OpenCode runs standalone with a dedicated agent whose permissions allow only read/glob/grep; it passes the prompt as a command-line argument and rejects prompts over 100,000 bytes. Local configuration, hooks, or plugins of external CLIs may have side effects beyond their tool permissions; use trusted installations. The external `fx ask --no-save` process is prompted not to change files, but the CLI cannot enforce its tool permissions. While waiting for any engine, an activity-specific spinner (for example, `⠋ Generating proposals with <engine>...`) is displayed on stderr; generation times out after 100 seconds without saving a new proposal.
-
-`prop-review spec` validates the histories and results of all reviewed chains without selection, then saves their approved items in `prop-review-tmp/spec.md`. It saves even when additional questions are found, recommending `prop-review clarify` in that case. Legacy roots without `request.txt` cannot be clarified and produce a warning. Existing files are not overwritten. It does not start implementation or another approval process.
-
-`prop-review clarify` lists root requests/issue titles and **you select the root**. It verifies every adjacent review and the linked `parent.txt` chain without mixing other roots; ambiguous branches, missing results, malformed links or missing root requests fail before contacting the engine. The selected engine receives the root request/title and that root's approved, pending and commented review history. It carries still-pending items forward and asks the engine for new questions arising from the current approvals, not renewed approval of completed items. The engine may return `[]`: if there are no pending items either, the CLI reports no additional questions and saves nothing. Otherwise a new proposal and `followup.txt` marker are saved beside `parent.txt` in a unique `review.*` directory and review starts. The original files are not replaced. If the current review has comments, `clarify` recommends running `revise` first; if pending items remain, it recommends reviewing them again in the new proposal. These messages do not interrupt generation. `revise` still only revises commented items; `clarify` does not implement approved work.
-
-Responses are validated as a JSON array of 1–10 nonempty single-line proposals and converted to `proposal.txt` with empty review fields (only `clarify` also accepts `[]`). With no path, `revise` uses the only reviewed proposal with comments and no child revision, or lists such proposals for selection if there are several (newest proposal modification time, then path). Pass a relative or absolute `prop-review-tmp/review.*/proposal.txt` from the same repository to revise that exact reviewed proposal instead; missing or mismatched adjacent results fail without falling back to another proposal. Revisions replace only commented items; unconfirmed items remain, and approved items remain in the earlier proposal and result. Each revised proposal includes a `parent.txt` file containing the previous `review.*` directory name, linking its review history. The `prop-review-ingest` skill follows these links to report approvals from earlier rounds together with the latest results. Pre-existing revisions without a link cannot be joined reliably. A revision does not automatically start review. When pending items are present, `revise` recommends reviewing them again in the revised proposal; pending-only reviews cannot be revised because `revise` changes comments only. Failed generation, invalid output, and cancelled input do not start review or overwrite earlier files. If generation succeeds but review is cancelled, the new unreviewed proposal remains on disk. Reviews saved to a custom destination instead of the default `proposal.review.txt` cannot be revised with `revise`.
-
-Use the `prop-review-ingest` skill to bring completed results into chat and receive the agent's response to the review, including answers to comments when possible. The `prop-review` skill handles generation and review handoff, not ingestion. Approval concerns only the specific item; it never automatically starts implementation.
+Use the `prop-review-ingest` skill to bring completed reviews into chat and answer comments. The `prop-review` skill handles generation and review handoff. Approval applies only to that item; implementation does not start automatically.
