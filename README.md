@@ -95,7 +95,7 @@ Without a selection, validate **all reviewed chains** in this repository and sen
 prop-review delete
 ```
 
-Choose among unreviewed proposals and reviewed proposals with comments but no child revision. Before deleting, the CLI displays the complete proposal and review (including approved items); type `delete` to confirm. Any other input cancels. Directories referenced by `parent.txt`, or candidates with links or unexpected files, are refused. Confirmation **permanently deletes** the selected `review.*` directory.
+Choose among unreviewed proposals and reviewed proposals with comments but no child revision. Before deleting, the CLI displays the complete proposal and review (including approved items); confirm with `y/N`. Only `y` (or `Y`) deletes; Enter and all other answers cancel. Directories referenced by `parent.txt`, or candidates with links or unexpected files, are refused. Confirmation **permanently deletes** the selected `review.*` directory.
 
 ### `prop-review engine` / `prop-review --engine NAME`
 

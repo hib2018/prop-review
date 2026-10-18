@@ -55,7 +55,7 @@ func TestDeleteProposal(t *testing.T) {
 		t.Fatalf("missing candidate %s", path)
 		return ""
 	}
-	for _, input := range []string{"q\n", choice(revisable) + "no\n", choice(revisable)} {
+	for _, input := range []string{"q\n", choice(revisable) + "no\n", choice(revisable) + "delete\n", choice(revisable) + "\n", choice(revisable)} {
 		var output strings.Builder
 		if err := deleteProposal(root, strings.NewReader(input), &output); err == nil {
 			t.Fatalf("cancel or interruption accepted: %q", input)
@@ -68,8 +68,11 @@ func TestDeleteProposal(t *testing.T) {
 		}
 	}
 	var output strings.Builder
-	if err := deleteProposal(root, strings.NewReader(choice(revisable)+"delete\n"), &output); err != nil {
+	if err := deleteProposal(root, strings.NewReader(choice(revisable)+"y\n"), &output); err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "[y/N]") {
+		t.Fatal("missing y/N deletion confirmation")
 	}
 	if _, err := os.Stat(filepath.Dir(revisable)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("review was not deleted: %v", err)
@@ -85,7 +88,7 @@ func TestDeleteProposal(t *testing.T) {
 	}
 	for i, path := range paths {
 		if path == child {
-			if err := deleteProposal(root, strings.NewReader(strconv.Itoa(i+1)+"\ndelete\n"), &output); err != nil {
+			if err := deleteProposal(root, strings.NewReader(strconv.Itoa(i+1)+"\ny\n"), &output); err != nil {
 				t.Fatal(err)
 			}
 			break
@@ -143,7 +146,7 @@ func TestDeleteRejectsUnsafeDirectories(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("keep"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := deleteProposal(root, strings.NewReader("1\ndelete\n"), &strings.Builder{}); err == nil {
+	if err := deleteProposal(root, strings.NewReader("1\ny\n"), &strings.Builder{}); err == nil {
 		t.Fatal("deleted directory with unrelated file")
 	}
 	for _, path := range []string{proposal, outside, filepath.Join(dir, "notes.txt")} {

@@ -166,11 +166,11 @@ func deleteProposal(root string, in io.Reader, out io.Writer) error {
 	if result != "" {
 		fmt.Fprintf(out, "Review (including any approvals):\n%s", result)
 	}
-	confirmation, err := inputLine(reader, out, "Type delete to confirm (anything else cancels): ", 32)
+	confirmation, err := inputLine(reader, out, "Delete this review permanently? [y/N]: ", 32)
 	if err != nil {
 		return fmt.Errorf("deletion cancelled: %w", err)
 	}
-	if confirmation != "delete" {
+	if !strings.EqualFold(strings.TrimSpace(confirmation), "y") {
 		return errors.New("deletion cancelled; nothing removed")
 	}
 	// Recheck both eligibility and contents after the human has seen them.

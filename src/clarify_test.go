@@ -238,7 +238,7 @@ func TestDeleteUnreviewedRootWithRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	var shown strings.Builder
-	if err := deleteProposal(root, strings.NewReader("1\ndelete\n"), &shown); err != nil {
+	if err := deleteProposal(root, strings.NewReader("1\ny\n"), &shown); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(shown.String(), "保存した依頼文") {
