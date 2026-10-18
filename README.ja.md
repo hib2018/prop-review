@@ -2,11 +2,11 @@
 
 [English README](README.md)
 
-提案を項目ごとにレビューするローカルCLIです。zintentのIntent承認ゲートとは独立しています。ソースコードは `src/` にあります。
+提案を項目ごとにレビューするローカルCLIです。ソースコードは `src/` にあります。
 
-## インストール（どのリポジトリからでも利用可能）
+## インストール
 
-このリポジトリのルートで実行します。`~/.local/bin` を `PATH` に追加してください。
+このリポジトリのルートで実行し、`~/.local/bin` を `PATH` に追加してください。
 
 ```sh
 mkdir -p "$HOME/.local/bin" "$HOME/.pi/agent/skills"
@@ -18,7 +18,7 @@ for skill in prop-review prop-review-ingest; do
 done
 ```
 
-共有の `~/.agents/skills` ディレクトリに対応したPi以外のエージェントでも使う場合は、そちらにもスキルへのリンクを作成します。
+Pi以外で共有の `~/.agents/skills` を使う場合は、そこにもリンクできます。
 
 ```sh
 mkdir -p "$HOME/.agents/skills"
