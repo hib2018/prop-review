@@ -11,6 +11,10 @@
 ```sh
 mkdir -p "$HOME/.local/bin" "$HOME/.pi/agent/skills"
 go build -o "$HOME/.local/bin/prop-review" ./src
+# 短縮コマンド（既存の prev は上書きしない）
+if ! command -v prev >/dev/null 2>&1 && [ ! -e "$HOME/.local/bin/prev" ] && [ ! -L "$HOME/.local/bin/prev" ]; then
+  ln -s prop-review "$HOME/.local/bin/prev"
+fi
 for skill in prop-review prop-review-ingest; do
   if [ ! -e "$HOME/.pi/agent/skills/$skill" ] && [ ! -L "$HOME/.pi/agent/skills/$skill" ]; then
     ln -s "$PWD/skills/$skill" "$HOME/.pi/agent/skills/$skill"
@@ -33,7 +37,7 @@ done
 
 ## コマンド
 
-Gitリポジトリ内で実行します。`generate`、`issue`、`revise`、`clarify`、`spec` はリポジトリの `prop-review-tmp/` を使用します。
+Gitリポジトリ内で実行します。`prev` は `prop-review` と同じコマンド・引数を受け付ける短縮名です（例: `prev spec`）。`generate`、`issue`、`revise`、`clarify`、`spec` はリポジトリの `prop-review-tmp/` を使用します。
 
 ### `prop-review` / `prop-review proposal.txt [result.txt]`
 

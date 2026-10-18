@@ -11,6 +11,10 @@ Run from this repository's root and add `~/.local/bin` to your `PATH`.
 ```sh
 mkdir -p "$HOME/.local/bin" "$HOME/.pi/agent/skills"
 go build -o "$HOME/.local/bin/prop-review" ./src
+# Short alias (do not overwrite an existing prev command)
+if ! command -v prev >/dev/null 2>&1 && [ ! -e "$HOME/.local/bin/prev" ] && [ ! -L "$HOME/.local/bin/prev" ]; then
+  ln -s prop-review "$HOME/.local/bin/prev"
+fi
 for skill in prop-review prop-review-ingest; do
   if [ ! -e "$HOME/.pi/agent/skills/$skill" ] && [ ! -L "$HOME/.pi/agent/skills/$skill" ]; then
     ln -s "$PWD/skills/$skill" "$HOME/.pi/agent/skills/$skill"
@@ -33,7 +37,7 @@ Existing links are not overwritten. Run `/reload` if Pi is already open. Re-run 
 
 ## Commands
 
-Run inside a Git repository. `generate`, `issue`, `revise`, `clarify`, and `spec` use its `prop-review-tmp/` directory.
+Run inside a Git repository. `prev` is a shorter name accepting the same commands and arguments as `prop-review` (for example, `prev spec`). `generate`, `issue`, `revise`, `clarify`, and `spec` use its `prop-review-tmp/` directory.
 
 ### `prop-review` / `prop-review proposal.txt [result.txt]`
 
