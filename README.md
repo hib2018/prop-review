@@ -87,7 +87,7 @@ Select a root request or issue title, validate that chain's approved, pending, a
 prop-review spec
 ```
 
-Without a selection, validate **all reviewed chains** in this repository and collect only approved items into one `prop-review-tmp/spec.md`. Even when additional or pending questions remain, the file is saved and `prop-review clarify` is recommended. Legacy roots lacking `request.txt` produce a warning because they cannot be clarified. An existing `spec.md` is never overwritten; invalid history prevents saving. This does not start implementation or another review.
+Without a selection, validate **all reviewed chains** in this repository and send only approved topics to the engine and save a readable summary memo in `prop-review-tmp/spec.md`. Verbatim topics and source paths are not required. Generated summaries may misstate or add details; check against the original review results. Additional or pending questions do not block the confirmation step; `prop-review clarify` is recommended. Legacy roots lacking `request.txt` produce a warning because they cannot be clarified. One spinner updates throughout clarification without adding a line for each chain; no separate summary-generation spinner is shown. The full generated Markdown and destination are shown in the terminal. Creating or overwriting requires `y/N` confirmation: only `y` (or `Y`) proceeds; Enter and all other answers cancel. Invalid history stops before the preview. `spec.md` is a reference memo, not a formal specification or approval record. This does not start implementation or another review.
 
 ### `prop-review delete`
 
@@ -124,7 +124,7 @@ Result fields accept only an empty value (pending), `Approved`, or `Comment: "..
 
 ## Engines and failures
 
-Engines are asked to read the repository and propose changes, not implement them. Responses are validated as JSON arrays of 1–10 single-line proposals; only `clarify` also allows an empty array. Language is not programmatically validated. An activity-specific spinner is shown on stderr, with a 100-second timeout. Invalid responses, failures, and cancelled input never overwrite earlier files.
+Engines are asked to read the repository and propose changes (or summarize approved topics for `spec`), not implement them. Responses are validated as JSON arrays of 1–10 single-line proposals; only `clarify` also allows an empty array. Language is not programmatically validated. An activity-specific spinner is shown on stderr, with a 100-second timeout. Invalid responses, failures, and cancelled input never overwrite earlier files.
 
 Pi uses a read-only session with extensions, skills, and prompt templates disabled; Claude uses restricted mode with Read/Glob/Grep; Codex uses a read-only sandbox; `agy` uses plan mode and terminal sandboxing; OpenCode uses a dedicated agent restricted to read/glob/grep. `agy` may save local session data. OpenCode passes prompts as command arguments and rejects those over 100,000 bytes. Instructions to `fx ask --no-save` cannot enforce tool permissions. Local settings, hooks, and plugins of external CLIs may have side effects.
 

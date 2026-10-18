@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -98,32 +99,34 @@ func proposalsWithLimit(root, prompt, engine string, timeout time.Duration, prog
 }
 
 func proposalsWithActivity(root, prompt, engine string, timeout time.Duration, progress io.Writer, allowEmpty bool, activity string) ([]item, error) {
+	output, err := engineResponse(root, prompt, engine, timeout, progress, activity)
+	if err != nil {
+		return nil, err
+	}
+	var topics []string
+	if err := json.Unmarshal(output, &topics); err != nil {
+		return nil, fmt.Errorf("invalid %s JSON: %w", engine, err)
+	}
+	if len(topics) > 10 || len(topics) == 0 && (!allowEmpty || strings.TrimSpace(string(output)) != "[]") {
+		return nil, fmt.Errorf("%s must return 1–10 proposals", engine)
+	}
+	items := make([]item, 0, len(topics))
+	for _, topic := range topics {
+		if topic != strings.TrimSpace(topic) || topic == "" || len(topic) > maxCommentBytes || strings.IndexFunc(topic, unicode.IsControl) >= 0 || !utf8.ValidString(topic) || strings.ContainsRune(topic, utf8.RuneError) {
+			return nil, fmt.Errorf("invalid %s proposal topic", engine)
+		}
+		items = append(items, item{topic: topic})
+	}
+	return items, nil
+}
+
+func engineResponse(root, prompt, engine string, timeout time.Duration, progress io.Writer, activity string) ([]byte, error) {
 	if !validEngine(engine) {
 		return nil, fmt.Errorf("unknown engine: %s", engine)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	done := make(chan struct{})
-	finished := make(chan struct{})
-	go func() {
-		defer close(finished)
-		ticker := time.NewTicker(150 * time.Millisecond)
-		defer ticker.Stop()
-		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
-		frame := 0
-		fmt.Fprintf(progress, "%c %s with %s...", frames[frame], activity, engine)
-		for {
-			select {
-			case <-ticker.C:
-				frame = (frame + 1) % len(frames)
-				fmt.Fprintf(progress, "\r%c %s with %s...", frames[frame], activity, engine)
-			case <-done:
-				fmt.Fprintln(progress)
-				return
-			}
-		}
-	}()
-	defer func() { close(done); <-finished }()
+	defer startSpinner(progress, activity, engine)()
 	var cmd *exec.Cmd
 	var resultFile string
 	switch engine {
@@ -194,21 +197,32 @@ func proposalsWithActivity(root, prompt, engine string, timeout time.Duration, p
 			return nil, err
 		}
 	}
-	var topics []string
-	if err := json.Unmarshal(output, &topics); err != nil {
-		return nil, fmt.Errorf("invalid %s JSON: %w", engine, err)
-	}
-	if len(topics) > 10 || len(topics) == 0 && (!allowEmpty || strings.TrimSpace(string(output)) != "[]") {
-		return nil, fmt.Errorf("%s must return 1–10 proposals", engine)
-	}
-	items := make([]item, 0, len(topics))
-	for _, topic := range topics {
-		if topic != strings.TrimSpace(topic) || topic == "" || len(topic) > maxCommentBytes || strings.IndexFunc(topic, unicode.IsControl) >= 0 || !utf8.ValidString(topic) || strings.ContainsRune(topic, utf8.RuneError) {
-			return nil, fmt.Errorf("invalid %s proposal topic", engine)
+	return output, nil
+}
+
+func startSpinner(progress io.Writer, activity, engine string) func() {
+	done := make(chan struct{})
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		ticker := time.NewTicker(150 * time.Millisecond)
+		defer ticker.Stop()
+		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+		frame := 0
+		fmt.Fprintf(progress, "%c %s with %s...", frames[frame], activity, engine)
+		for {
+			select {
+			case <-ticker.C:
+				frame = (frame + 1) % len(frames)
+				fmt.Fprintf(progress, "\r%c %s with %s...", frames[frame], activity, engine)
+			case <-done:
+				fmt.Fprintln(progress)
+				return
+			}
 		}
-		items = append(items, item{topic: topic})
-	}
-	return items, nil
+	}()
+	var once sync.Once
+	return func() { once.Do(func() { close(done); <-finished }) }
 }
 
 func opencodeResponse(output []byte) ([]byte, error) {
