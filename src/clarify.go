@@ -95,6 +95,10 @@ func selectClarificationRoot(paths []string, in io.Reader, out io.Writer) (strin
 }
 
 func clarificationHistory(root, selected string) ([]reviewStep, string, error) {
+	return reviewHistory(root, selected, true)
+}
+
+func reviewHistory(root, selected string, requireRequest bool) ([]reviewStep, string, error) {
 	paths, err := proposalPaths(root)
 	if err != nil {
 		return nil, "", err
@@ -184,6 +188,9 @@ func clarificationHistory(root, selected string) ([]reviewStep, string, error) {
 		name = children[name][0]
 	}
 	request, err := localFile(filepath.Join(filepath.Dir(selected), "request.txt"))
+	if errors.Is(err, os.ErrNotExist) && !requireRequest {
+		return history, "", nil
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, "", errors.New("invalid root: missing request.txt")
 	}
