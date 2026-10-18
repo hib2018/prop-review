@@ -94,6 +94,10 @@ func proposalsWithTimeout(root, prompt, engine string, timeout time.Duration, pr
 }
 
 func proposalsWithLimit(root, prompt, engine string, timeout time.Duration, progress io.Writer, allowEmpty bool) ([]item, error) {
+	return proposalsWithActivity(root, prompt, engine, timeout, progress, allowEmpty, "Generating proposals")
+}
+
+func proposalsWithActivity(root, prompt, engine string, timeout time.Duration, progress io.Writer, allowEmpty bool, activity string) ([]item, error) {
 	if !validEngine(engine) {
 		return nil, fmt.Errorf("unknown engine: %s", engine)
 	}
@@ -107,12 +111,12 @@ func proposalsWithLimit(root, prompt, engine string, timeout time.Duration, prog
 		defer ticker.Stop()
 		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 		frame := 0
-		fmt.Fprintf(progress, "%c Generating proposals with %s...", frames[frame], engine)
+		fmt.Fprintf(progress, "%c %s with %s...", frames[frame], activity, engine)
 		for {
 			select {
 			case <-ticker.C:
 				frame = (frame + 1) % len(frames)
-				fmt.Fprintf(progress, "\r%c Generating proposals with %s...", frames[frame], engine)
+				fmt.Fprintf(progress, "\r%c %s with %s...", frames[frame], activity, engine)
 			case <-done:
 				fmt.Fprintln(progress)
 				return

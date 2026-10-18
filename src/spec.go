@@ -67,7 +67,7 @@ func saveSpec(engine string) error {
 		if request == "" {
 			fmt.Fprintf(os.Stderr, "Cannot clarify %s: missing request.txt; run clarify after restoring the request.\n", path)
 		} else {
-			questions, _, err := clarificationQuestions(root, path, engine)
+			questions, _, err := clarificationQuestionsFor(root, path, engine, "Checking spec clarifications")
 			if err != nil {
 				return err
 			}

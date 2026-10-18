@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func clarificationFixture(t *testing.T) (string, string, string) {
@@ -138,6 +140,16 @@ func TestClarificationHistoryAndGeneration(t *testing.T) {
 	}
 	if _, _, err := clarificationHistory(root, original); err != nil {
 		t.Fatalf("followup history: %v", err)
+	}
+}
+
+func TestActivityProgress(t *testing.T) {
+	root, _, _ := clarificationFixture(t)
+	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	var progress bytes.Buffer
+	_, err := proposalsWithActivity(root, "prompt", "fx", time.Second, &progress, true, "Checking spec clarifications")
+	if err != nil || !strings.Contains(progress.String(), "Checking spec clarifications with fx...") || strings.Contains(progress.String(), "Generating proposals") {
+		t.Fatalf("progress: %q, %v", progress.String(), err)
 	}
 }
 
