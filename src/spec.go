@@ -34,15 +34,20 @@ func saveSpecWithConfirmation(engine string, in io.Reader, out io.Writer) error 
 	for _, path := range paths {
 		known[filepath.Base(filepath.Dir(path))] = true
 	}
+	var warnings []string
+	excluded := map[string]bool{}
 	var roots []string
 	for _, path := range paths {
 		parent, err := parentName(path)
 		if err != nil {
-			return err
+			warnings = append(warnings, fmt.Sprintf("Excluded %s: %v", path, err))
+			excluded[path] = true
+			continue
 		}
 		if parent != "" {
 			if !known[parent] {
-				return fmt.Errorf("missing parent review: %s", parent)
+				warnings = append(warnings, fmt.Sprintf("Excluded %s: missing parent review %s", path, parent))
+				excluded[path] = true
 			}
 			continue
 		}
@@ -50,11 +55,12 @@ func saveSpecWithConfirmation(engine string, in io.Reader, out io.Writer) error 
 		if err == nil {
 			roots = append(roots, path)
 		} else if !errors.Is(err, os.ErrNotExist) {
-			return err
+			warnings = append(warnings, fmt.Sprintf("Excluded %s: %v", path, err))
+			excluded[path] = true
 		}
 	}
 	if len(roots) == 0 {
-		return errors.New("no reviewed proposal in prop-review-tmp")
+		return fmt.Errorf("no valid reviewed proposal in prop-review-tmp: %s", strings.Join(warnings, "; "))
 	}
 	// Keep output stable across runs, independent of filesystem enumeration order.
 	roots, err = newestFirst(roots)
@@ -66,12 +72,13 @@ func saveSpecWithConfirmation(engine string, in io.Reader, out io.Writer) error 
 	covered := map[string]bool{}
 	stopChecking := func() {}
 	defer func() { stopChecking() }()
-	var warnings []string
 	checkingShown := false
 	for _, path := range roots {
 		history, request, err := reviewHistory(root, path, false)
 		if err != nil {
-			return err
+			warnings = append(warnings, fmt.Sprintf("Excluded %s: %v", path, err))
+			excluded[path] = true
+			continue
 		}
 		if request == "" {
 			warnings = append(warnings, fmt.Sprintf("Cannot clarify %s: missing request.txt; run clarify after restoring the request.", path))
@@ -80,11 +87,10 @@ func saveSpecWithConfirmation(engine string, in io.Reader, out io.Writer) error 
 				stopChecking = startSpinner(out, "Checking spec clarifications", engine)
 				checkingShown = true
 			}
-			questions, _, err := clarificationQuestionsFor(root, path, engine, "Checking spec clarifications", io.Discard)
+			questions, _, err := clarificationQuestionsFromHistory(root, history, request, engine, "Checking spec clarifications", io.Discard)
 			if err != nil {
-				return err
-			}
-			if len(questions) > 0 {
+				warnings = append(warnings, fmt.Sprintf("Could not check additional questions for %s: %v; retry with `prop-review clarify`.", path, err))
+			} else if len(questions) > 0 {
 				warnings = append(warnings, fmt.Sprintf("Additional questions for %s: run `prop-review clarify`.", path))
 			}
 		}
@@ -100,18 +106,18 @@ func saveSpecWithConfirmation(engine string, in io.Reader, out io.Writer) error 
 		}
 	}
 	stopChecking()
-	for _, warning := range warnings {
-		fmt.Fprintln(os.Stderr, warning)
-	}
 	for _, path := range paths {
-		if _, err := localFile(filepath.Join(filepath.Dir(path), "proposal.review.txt")); err == nil && !covered[path] {
-			return fmt.Errorf("review is not linked to a valid root: %s", path)
+		if covered[path] || excluded[path] {
+			continue
+		}
+		if _, err := localFile(filepath.Join(filepath.Dir(path), "proposal.review.txt")); err == nil {
+			warnings = append(warnings, fmt.Sprintf("Excluded %s: review is not linked to a valid root", path))
 		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
+			warnings = append(warnings, fmt.Sprintf("Excluded %s: %v", path, err))
 		}
 	}
 	if len(approved) == 0 {
-		return errors.New("no approved items to save")
+		return fmt.Errorf("no approved items in valid review chains; %s", strings.Join(warnings, "; "))
 	}
 	data, err := json.Marshal(approved)
 	if err != nil {
@@ -127,10 +133,10 @@ func saveSpecWithConfirmation(engine string, in io.Reader, out io.Writer) error 
 		return errors.New("invalid spec memo from engine")
 	}
 	body := "# 承認事項のメモ / Approved items memo\n\n参考用の要約です。承認内容は元のレビュー結果を確認してください。 / Reference only; check the original review results for approvals.\n\n" + memo + "\n"
-	return confirmSpec(output, body, in, out)
+	return confirmSpec(output, body, in, out, warnings...)
 }
 
-func confirmSpec(path, body string, in io.Reader, out io.Writer) error {
+func confirmSpec(path, body string, in io.Reader, out io.Writer, warnings ...string) error {
 	old, err := existingSpec(path)
 	if err != nil {
 		return err
@@ -140,6 +146,12 @@ func confirmSpec(path, body string, in io.Reader, out io.Writer) error {
 		action = "Overwrite existing file"
 	}
 	fmt.Fprintf(out, "\nGenerated memo for %s:\n\n%s\n", path, body)
+	if len(warnings) > 0 {
+		fmt.Fprintln(out, "Warnings (excluded or unverified reviews):")
+		for _, warning := range warnings {
+			fmt.Fprintln(out, "- "+warning)
+		}
+	}
 	if old != nil {
 		fmt.Fprintf(out, "Existing file will be replaced (%d bytes).\n", len(old))
 	}

@@ -171,6 +171,98 @@ func TestConfirmSpecRejectsSymlink(t *testing.T) {
 	}
 }
 
+func TestSaveSpecExcludesBrokenChainBeforeConfirmation(t *testing.T) {
+	root, broken, promptFile := clarificationFixture(t)
+	specFixtureEngine(t, promptFile, "正常な承認の要約")
+	valid, err := saveProposalWithMetadata(root, []item{{topic: "正常な承認"}}, "", "正常な依頼", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeReview(t, valid, []item{{topic: "正常な承認", answer: "Approved"}})
+	if err := os.WriteFile(filepath.Join(filepath.Dir(broken), "proposal.review.txt"), []byte("wrong\nApproval/Comment:Approved\n\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	inFixtureRepo(t, root)
+	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	output := filepath.Join(root, "prop-review-tmp", "spec.md")
+	var preview strings.Builder
+	if err := saveSpecWithConfirmation("fx", strings.NewReader("N\n"), &preview); err == nil {
+		t.Fatal("saved after N")
+	}
+	if _, err := os.Stat(output); !os.IsNotExist(err) {
+		t.Fatalf("cancelled spec created: %v", err)
+	}
+	shown := preview.String()
+	if !strings.Contains(shown, "正常な承認の要約") || !strings.Contains(shown, filepath.Base(filepath.Dir(broken))) || strings.Index(shown, "Warnings (excluded") > strings.Index(shown, "[y/N]") {
+		t.Fatalf("missing warning before approval: %s", shown)
+	}
+	prompt, err := os.ReadFile(promptFile)
+	if err != nil || !strings.Contains(string(prompt), "正常な承認") || strings.Contains(string(prompt), "承認事項") {
+		t.Fatalf("invalid chain leaked into summary: %s, %v", prompt, err)
+	}
+	if err := saveSpecWithConfirmation("fx", strings.NewReader("y\n"), io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(output)
+	if err != nil || !strings.Contains(string(data), "正常な承認の要約") {
+		t.Fatalf("valid chain was not saved: %s, %v", data, err)
+	}
+}
+
+func TestSaveSpecChecksValidChainDespiteBrokenUnrelatedLink(t *testing.T) {
+	root, valid, promptFile := clarificationFixture(t)
+	specFixtureEngine(t, promptFile, "承認事項のメモ")
+	broken, err := saveProposal(root, []item{{topic: "孤立した承認"}}, valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeReview(t, broken, []item{{topic: "孤立した承認", answer: "Approved"}})
+	if err := os.WriteFile(filepath.Join(filepath.Dir(broken), "parent.txt"), []byte("../../invalid\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	inFixtureRepo(t, root)
+	t.Setenv("CLARIFY_OUTPUT", `["追加確認事項"]`)
+	var preview strings.Builder
+	if err := saveSpecWithConfirmation("fx", strings.NewReader("N\n"), &preview); err == nil {
+		t.Fatal("saved after N")
+	}
+	shown := preview.String()
+	if !strings.Contains(shown, "Additional questions for") || !strings.Contains(shown, "Excluded ") || strings.Contains(shown, "Could not check additional questions") {
+		t.Fatalf("valid chain was not checked independently: %s", shown)
+	}
+	prompt, err := os.ReadFile(promptFile)
+	if err != nil || !strings.Contains(string(prompt), "承認事項") || strings.Contains(string(prompt), "孤立した承認") {
+		t.Fatalf("excluded chain leaked into summary: %s, %v", prompt, err)
+	}
+}
+
+func TestSaveSpecContinuesAfterOneClarificationFailure(t *testing.T) {
+	root, first, promptFile := clarificationFixture(t)
+	writeReview(t, first, []item{{topic: "承認事項", answer: "Approved"}, {topic: "未確認"}, {topic: "要改訂", answer: "直して", comment: true}})
+	second, err := saveProposalWithMetadata(root, []item{{topic: "別の承認"}}, "", "別の依頼", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeReview(t, second, []item{{topic: "別の承認", answer: "Approved"}})
+	script := "#!/bin/sh\nprompt=$(cat)\nprintf '%s' \"$prompt\" > \"$CLARIFY_PROMPT\"\ncase \"$prompt\" in\n  *'Write a clear, concise Markdown reference memo'*) printf '承認事項と別の承認のメモ\\n' ;;\n  *'元の依頼'*) printf 'invalid-json\\n' ;;\n  *) printf '[]\\n' ;;\nesac\n"
+	if err := os.WriteFile(filepath.Join(filepath.Dir(promptFile), "fx"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	inFixtureRepo(t, root)
+	var preview strings.Builder
+	if err := saveSpecWithConfirmation("fx", strings.NewReader("y\n"), &preview); err != nil {
+		t.Fatal(err)
+	}
+	shown := preview.String()
+	if !strings.Contains(shown, "Could not check additional questions") || !strings.Contains(shown, "retry with `prop-review clarify`") || strings.Index(shown, "Warnings (excluded") > strings.Index(shown, "[y/N]") {
+		t.Fatalf("failure was not shown before approval: %s", shown)
+	}
+	prompt, err := os.ReadFile(promptFile)
+	if err != nil || !strings.Contains(string(prompt), "承認事項") || !strings.Contains(string(prompt), "別の承認") {
+		t.Fatalf("valid approvals missing from summary: %s, %v", prompt, err)
+	}
+}
+
 func TestSaveSpecRejectsBrokenReview(t *testing.T) {
 	root, original, _ := clarificationFixture(t)
 	inFixtureRepo(t, root)

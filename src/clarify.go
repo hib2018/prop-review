@@ -111,7 +111,10 @@ func reviewHistory(root, selected string, requireRequest bool) ([]reviewStep, st
 		known[name] = path
 		parent, err := parentName(path)
 		if err != nil {
-			return nil, "", err
+			if requireRequest {
+				return nil, "", err
+			}
+			continue // A malformed, unlinked review cannot invalidate an unrelated spec chain.
 		}
 		if parent != "" {
 			children[parent] = append(children[parent], name)
@@ -222,6 +225,10 @@ func clarificationQuestionsFor(root, selected, engine, activity string, progress
 	if err != nil {
 		return nil, "", err
 	}
+	return clarificationQuestionsFromHistory(root, history, request, engine, activity, progress)
+}
+
+func clarificationQuestionsFromHistory(root string, history []reviewStep, request, engine, activity string, progress io.Writer) ([]item, string, error) {
 	type reviewContext struct {
 		Proposal string `json:"proposal"`
 		Items    []struct {
