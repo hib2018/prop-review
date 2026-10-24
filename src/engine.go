@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -85,6 +87,51 @@ func validEngine(engine string) bool {
 //go:embed pi_sdk.mjs
 var piSDK string
 
+const maxEngineOutputBytes = 16 << 20
+const maxEngineErrorBytes = 64 << 10
+const maxNpmOutputBytes = 8 << 10
+const maxOpenCodeTextBytes = 12 << 20
+
+type limitedCapture struct {
+	buf      bytes.Buffer
+	limit    int
+	exceeded atomic.Bool
+	cancel   context.CancelFunc
+}
+
+func (c *limitedCapture) Write(p []byte) (int, error) {
+	if c.exceeded.Load() {
+		return len(p), nil
+	}
+	remaining := c.limit - c.buf.Len()
+	if len(p) > remaining {
+		c.buf.Write(p[:remaining])
+		c.exceeded.Store(true)
+		c.cancel()
+		return len(p), nil
+	}
+	return c.buf.Write(p)
+}
+
+func (c *limitedCapture) String() string { return c.buf.String() }
+func (c *limitedCapture) Bytes() []byte  { return c.buf.Bytes() }
+
+func readLimitedFile(path string, limit int) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > limit {
+		return nil, fmt.Errorf("result file exceeds %d bytes", limit)
+	}
+	return data, nil
+}
+
 // Engines return only a JSON array of proposal strings; never trust it as a proposal file.
 func proposals(root, prompt, engine string) ([]item, error) {
 	return proposalsWithTimeout(root, prompt, engine, 100*time.Second, os.Stderr)
@@ -139,14 +186,23 @@ func engineResponse(root, prompt, engine string, timeout time.Duration, progress
 	case "pi":
 		npm := exec.CommandContext(ctx, "npm", "root", "-g")
 		npm.WaitDelay = time.Second
-		modules, err := npm.Output()
+		modules := &limitedCapture{limit: maxNpmOutputBytes, cancel: cancel}
+		npmErrors := &limitedCapture{limit: maxEngineErrorBytes, cancel: cancel}
+		npm.Stdout, npm.Stderr = modules, npmErrors
+		err := npm.Run()
+		if modules.exceeded.Load() {
+			return nil, fmt.Errorf("npm root -g output exceeds %d bytes", maxNpmOutputBytes)
+		}
+		if npmErrors.exceeded.Load() {
+			return nil, fmt.Errorf("npm root -g stderr exceeds %d bytes", maxEngineErrorBytes)
+		}
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, fmt.Errorf("%s timed out after %s: %w", engine, timeout, ctx.Err())
 			}
-			return nil, fmt.Errorf("locate Pi SDK (npm root -g): %w", err)
+			return nil, fmt.Errorf("locate Pi SDK (npm root -g): %w: %s", err, strings.TrimSpace(npmErrors.String()))
 		}
-		cmd = exec.CommandContext(ctx, "node", "--input-type=module", "-e", piSDK, strings.TrimSpace(string(modules)))
+		cmd = exec.CommandContext(ctx, "node", "--input-type=module", "-e", piSDK, strings.TrimSpace(modules.String()))
 		cmd.Stdin = strings.NewReader(prompt)
 	case "claude":
 		cmd = exec.CommandContext(ctx, "claude", "--print", "--restricted", "--strict-mcp-config", "--tools", "Read,Glob,Grep", "--permission-prompts", "none", "--no-session-persistence", "--output-format", "text")
@@ -179,18 +235,26 @@ func engineResponse(root, prompt, engine string, timeout time.Duration, progress
 	}
 	cmd.Dir = root
 	cmd.WaitDelay = time.Second
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-	output, err := cmd.Output()
+	stdout := &limitedCapture{limit: maxEngineOutputBytes, cancel: cancel}
+	stderr := &limitedCapture{limit: maxEngineErrorBytes, cancel: cancel}
+	cmd.Stdout, cmd.Stderr = stdout, stderr
+	err := cmd.Run()
+	if stdout.exceeded.Load() {
+		return nil, fmt.Errorf("%s stdout exceeds %d bytes", engine, maxEngineOutputBytes)
+	}
+	if stderr.exceeded.Load() {
+		return nil, fmt.Errorf("%s stderr exceeds %d bytes: %s", engine, maxEngineErrorBytes, strings.TrimSpace(stderr.String()))
+	}
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("%s timed out after %s: %w", engine, timeout, ctx.Err())
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s failed: %w: %s", engine, err, strings.TrimSpace(stderr.String()))
 	}
+	output := stdout.Bytes()
 	switch engine {
 	case "codex":
-		output, err = os.ReadFile(resultFile)
+		output, err = readLimitedFile(resultFile, maxEngineOutputBytes)
 		if err != nil {
 			return nil, fmt.Errorf("read codex response: %w", err)
 		}
@@ -229,6 +293,9 @@ func startSpinner(progress io.Writer, activity, engine string) func() {
 }
 
 func opencodeResponse(output []byte) ([]byte, error) {
+	if len(output) > maxEngineOutputBytes {
+		return nil, fmt.Errorf("opencode events exceed %d bytes", maxEngineOutputBytes)
+	}
 	var text strings.Builder
 	var messageID string
 	decoder := json.NewDecoder(strings.NewReader(string(output)))
@@ -253,6 +320,9 @@ func opencodeResponse(output []byte) ([]byte, error) {
 		if event.Part.MessageID != "" && event.Part.MessageID != messageID {
 			text.Reset()
 			messageID = event.Part.MessageID
+		}
+		if len(event.Part.Text) > maxOpenCodeTextBytes-text.Len() {
+			return nil, fmt.Errorf("opencode text exceeds %d bytes", maxOpenCodeTextBytes)
 		}
 		text.WriteString(event.Part.Text)
 	}
