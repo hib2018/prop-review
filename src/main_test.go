@@ -50,9 +50,14 @@ func TestFXAndRevision(t *testing.T) {
 	if err != nil || string(stdin) != longPrompt {
 		t.Fatalf("fx stdin length: %d, %v", len(stdin), err)
 	}
-	t.Setenv("FX_OUTPUT", `[`+strings.Repeat(`"提案",`, 9)+`"提案"]`)
+	var ten []string
+	for i := 1; i <= 10; i++ {
+		ten = append(ten, "提案"+strconv.Itoa(i))
+	}
+	valid, _ := json.Marshal(ten)
+	t.Setenv("FX_OUTPUT", string(valid))
 	if items, err := proposals(root, "prompt", "fx"); err != nil || len(items) != 10 {
-		t.Fatalf("10 proposals should be valid: %d, %v", len(items), err)
+		t.Fatalf("10 distinct proposals should be valid: %d, %v", len(items), err)
 	}
 	for _, bad := range []string{`[]`, `[` + strings.Repeat(`"提案",`, 10) + `"提案"]`, `["bad\nline"]`, `["承認", ""]`, `not-json`, `["文字化け�"]`, `["safe\u001b[2J"]`} {
 		t.Setenv("FX_OUTPUT", bad)

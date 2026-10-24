@@ -117,6 +117,9 @@ func proposalsWithActivity(root, prompt, engine string, timeout time.Duration, p
 		}
 		items = append(items, item{topic: topic})
 	}
+	if err := uniqueTopics(items); err != nil {
+		return nil, err
+	}
 	return items, nil
 }
 

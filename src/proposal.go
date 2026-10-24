@@ -56,7 +56,21 @@ func parse(r io.Reader) ([]item, error) {
 	if len(items) == 0 {
 		return nil, errors.New("no items")
 	}
+	if err := uniqueTopics(items); err != nil {
+		return nil, err
+	}
 	return items, nil
+}
+
+func uniqueTopics(items []item) error {
+	seen := make(map[string]bool, len(items))
+	for _, it := range items {
+		if seen[it.topic] {
+			return fmt.Errorf("duplicate proposal topic: %q", it.topic)
+		}
+		seen[it.topic] = true
+	}
+	return nil
 }
 
 func render(items []item) string {
@@ -159,6 +173,9 @@ func saveProposal(root string, items []item, parent string) (string, error) {
 }
 
 func saveProposalWithMetadata(root string, items []item, parent, request string, followup bool) (string, error) {
+	if err := uniqueTopics(items); err != nil {
+		return "", err
+	}
 	base := filepath.Join(root, "prop-review-tmp")
 	if err := os.MkdirAll(base, 0700); err != nil {
 		return "", err
