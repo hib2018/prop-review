@@ -122,7 +122,7 @@ Document how to restore a saved review
 Approval/Comment:
 ```
 
-Result fields accept only an empty value (pending), `Approved`, or `Comment: "..."` with Go-style quoting/escaping. Topics must be nonempty single lines; invalid UTF-8, the replacement character `�`, and control characters are rejected. `parent.txt` records the previous `review.*` directory name; `followup.txt` marks a clarification proposal. Unlinked old revisions are not assumed to belong to the same chain.
+Result fields accept only an empty value (pending), `Approved`, or `Comment: "..."` with Go-style quoting/escaping. Topics must be nonempty single lines; invalid UTF-8, the replacement character `�`, control characters, and duplicate text within one proposal are rejected. This also applies to generated output, saving, reading old proposals, and validating review history; existing files are not silently modified. The same topic may appear across generations when an item is carried forward in a revision. `parent.txt` records the previous `review.*` directory name; `followup.txt` marks a clarification proposal. Unlinked old revisions are not assumed to belong to the same chain.
 
 `generate` and `revise` create unique `review.*` directories and add `/prop-review-tmp/` to local Git `info/exclude` if necessary. Reviewing alone does not change Git settings. Local review files may contain private requests and comments.
 
