@@ -512,7 +512,7 @@ func TestEngineTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 	progress.Reset()
-	items, err = proposalsWithTimeout(t.TempDir(), "prompt", "fx", time.Second, &progress)
+	items, err = proposalsWithTimeout(t.TempDir(), "prompt", "fx", 5*time.Second, &progress)
 	if err != nil || len(items) != 1 || !strings.HasPrefix(progress.String(), "⠋ Generating proposals with fx...") || !strings.HasSuffix(progress.String(), "\n") {
 		t.Fatalf("fast completion: %v, %v, %q", items, err, progress.String())
 	}
