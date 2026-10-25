@@ -145,11 +145,12 @@ func confirmSpec(path, body string, in io.Reader, out io.Writer, warnings ...str
 	if old != nil {
 		action = "Overwrite existing file"
 	}
-	fmt.Fprintf(out, "\nGenerated memo for %s:\n\n%s\n", path, body)
+	fmt.Fprintf(out, "\nGenerated memo for %s:\n\n%s\n", displayCurrentPath(path), body)
 	if len(warnings) > 0 {
 		fmt.Fprintln(out, "Warnings (excluded or unverified reviews):")
+		root := filepath.Dir(filepath.Dir(path))
 		for _, warning := range warnings {
-			fmt.Fprintln(out, "- "+warning)
+			fmt.Fprintln(out, "- "+displayMessage(root, warning))
 		}
 	}
 	if old != nil {

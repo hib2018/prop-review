@@ -110,7 +110,7 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "Reviewing: %s\n", args[0])
+	fmt.Fprintf(os.Stderr, "Reviewing: %s\n", displayCurrentPath(args[0]))
 	output := strings.TrimSuffix(args[0], filepath.Ext(args[0])) + ".review.txt"
 	if len(args) == 2 {
 		output = args[1]
@@ -154,12 +154,13 @@ func run(args []string) error {
 			os.Remove(output)
 			return err
 		}
-		fmt.Println(output)
+		fmt.Println(displayCurrentPath(output))
 		return nil
 	})
 }
 
 func selectProposal(paths []string, in io.Reader, out io.Writer) (string, error) {
+	root, _ := repoRoot()
 	for i, path := range paths {
 		f, err := os.Open(path)
 		if err != nil {
@@ -176,7 +177,7 @@ func selectProposal(paths []string, in io.Reader, out io.Writer) (string, error)
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return "", err
 		}
-		fmt.Fprintf(out, "%d) [%s] %s  %s\n", i+1, status, path, items[0].topic)
+		fmt.Fprintf(out, "%d) [%s] %s  %s\n", i+1, status, displayPath(root, path), items[0].topic)
 	}
 	r := bufio.NewReader(in)
 	for {
@@ -336,7 +337,7 @@ func saveAndReview(root string, items []item, parent, request string, openReview
 	if err != nil {
 		return err
 	}
-	fmt.Println(path)
+	fmt.Println(displayPath(root, path))
 	if openReview {
 		return run([]string{path})
 	}

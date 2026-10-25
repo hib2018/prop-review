@@ -64,6 +64,7 @@ func clarificationRoots(root string) ([]string, error) {
 }
 
 func selectClarificationRoot(paths []string, in io.Reader, out io.Writer) (string, error) {
+	root, _ := repoRoot()
 	for i, path := range paths {
 		request, err := localFile(filepath.Join(filepath.Dir(path), "request.txt"))
 		if errors.Is(err, os.ErrNotExist) {
@@ -75,7 +76,7 @@ func selectClarificationRoot(paths []string, in io.Reader, out io.Writer) (strin
 		if len(label) > 100 {
 			label = append(label[:100], '…')
 		}
-		fmt.Fprintf(out, "%d) %s  %q\n", i+1, path, string(label))
+		fmt.Fprintf(out, "%d) %s  %q\n", i+1, displayPath(root, path), string(label))
 	}
 	reader := bufio.NewReader(in)
 	for {
@@ -376,7 +377,7 @@ func clarify(engine string) error {
 		fmt.Println("No additional questions; no proposal created.")
 		return nil
 	}
-	fmt.Println(path)
+	fmt.Println(displayPath(root, path))
 	return run([]string{path})
 }
 

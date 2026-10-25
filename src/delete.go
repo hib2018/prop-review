@@ -162,7 +162,7 @@ func deleteProposal(root string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "\nDelete: %s\nProposal:\n%s", path, proposal)
+	fmt.Fprintf(out, "\nDelete: %s\nProposal:\n%s", displayPath(root, path), proposal)
 	if result != "" {
 		fmt.Fprintf(out, "Review (including any approvals):\n%s", result)
 	}
@@ -198,6 +198,6 @@ func deleteProposal(root string, in io.Reader, out io.Writer) error {
 	if err := os.Remove(dir); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "Deleted: %s\n", dir)
+	fmt.Fprintf(out, "Deleted: %s\n", displayPath(root, dir))
 	return nil
 }
