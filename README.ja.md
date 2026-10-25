@@ -37,7 +37,7 @@ done
 
 ## コマンド
 
-Gitリポジトリ内で実行します。`prev` は `prop-review` と同じコマンド・引数を受け付ける短縮名です（例: `prev spec`）。`generate`、`issue`、`revise`、`clarify`、`spec` はリポジトリの `prop-review-tmp/` を使用します。
+Gitリポジトリ内で実行します。画面上ではリポジトリ内のパスを短く表示し、`prop-review-tmp/` 以下は共通部分を省いて `review.xxx/proposal.txt` のように表示します。実際のファイルは `prop-review-tmp/` 以下にあり、コマンドへパスを直接渡す際にはその接頭辞が必要です。`prev` は `prop-review` と同じコマンド・引数を受け付ける短縮名です（例: `prev spec`）。`generate`、`issue`、`revise`、`clarify`、`spec` はリポジトリの `prop-review-tmp/` を使用します。
 
 ### `prop-review` / `prop-review proposal.txt [result.txt]`
 

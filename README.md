@@ -37,7 +37,7 @@ Existing links are not overwritten. Run `/reload` if Pi is already open. Re-run 
 
 ## Commands
 
-Run inside a Git repository. `prev` is a shorter name accepting the same commands and arguments as `prop-review` (for example, `prev spec`). `generate`, `issue`, `revise`, `clarify`, and `spec` use its `prop-review-tmp/` directory.
+Run inside a Git repository. Displayed paths are abbreviated within the repository: the common `prop-review-tmp/` prefix is omitted, so a proposal appears as `review.xxx/proposal.txt`. The actual file remains under `prop-review-tmp/`; include that prefix when passing a path back to the CLI. `prev` is a shorter name accepting the same commands and arguments as `prop-review` (for example, `prev spec`). `generate`, `issue`, `revise`, `clarify`, and `spec` use its `prop-review-tmp/` directory.
 
 ### `prop-review` / `prop-review proposal.txt [result.txt]`
 
