@@ -92,7 +92,7 @@ Select a reviewed proposal with comments, or specify a proposal in the same repo
 prop-review clarify
 ```
 
-Select a root request or issue title, validate that chain's approved, pending, and commented review history, and look for additional questions. Pending items carry forward. When questions remain, the CLI creates a linked proposal with `followup.txt` and `parent.txt` and starts review; when none remain, it saves nothing. Legacy roots without `request.txt`, missing or invalid results, and ambiguous histories fail. It recommends `revise` for comments and another review for pending items.
+Select a root request or issue title, validate that chain's approved, pending, and commented review history, and look for additional questions. Pending and unresolved commented items carry forward without duplicates (excluding superseded comments and approved items), within the 10-question limit. When questions remain, the CLI creates a linked proposal with `followup.txt` and `parent.txt` and starts review; when none remain, it saves nothing. Legacy roots without `request.txt`, missing or invalid results, and ambiguous histories fail. It recommends `revise` for comments and another review for pending items.
 
 ### `prop-review spec`
 

@@ -190,12 +190,75 @@ func TestClarificationNoQuestionsAndInvalidHistory(t *testing.T) {
 	}
 }
 
-func TestClarificationCarriesPendingWhenNoNewQuestions(t *testing.T) {
+func TestClarificationCarriesCommentsWhenNoNewQuestions(t *testing.T) {
+	root, original, promptFile := clarificationFixture(t)
+	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	items, parent, err := clarificationQuestions(root, original, "fx")
+	if err != nil || parent != original || len(items) != 2 || items[0].topic != "未確認" || items[1].topic != "要改訂" {
+		t.Fatalf("unresolved items not carried: %v, %s, %v", items, parent, err)
+	}
+	prompt, err := os.ReadFile(promptFile)
+	if err != nil || !strings.Contains(string(prompt), "pending and commented items will be carried forward") {
+		t.Fatalf("engine prompt: %q, %v", prompt, err)
+	}
+}
+
+func TestClarificationRevisionAndFollowupStatuses(t *testing.T) {
 	root, original, _ := clarificationFixture(t)
+	// Revisions supersede comments; followups add independent items instead.
+	revised, err := saveProposal(root, []item{{topic: "未確認"}, {topic: "改訂済み"}}, original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeReview(t, revised, []item{{topic: "未確認", answer: "Approved"}, {topic: "改訂済み", answer: "再検討", comment: true}})
+	followup, err := saveProposalWithMetadata(root, []item{{topic: "改訂済み"}, {topic: "追加質問"}}, revised, "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeReview(t, followup, []item{{topic: "改訂済み", answer: "まだ", comment: true}, {topic: "追加質問"}})
+	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	items, _, err := clarificationQuestions(root, original, "fx")
+	if err != nil || len(items) != 2 || items[0].topic != "改訂済み" || items[1].topic != "追加質問" {
+		t.Fatalf("revision/followup unresolved items: %v, %v", items, err)
+	}
+	writeReview(t, followup, []item{{topic: "改訂済み", answer: "Approved"}, {topic: "追加質問"}})
+	items, _, err = clarificationQuestions(root, original, "fx")
+	if err != nil || len(items) != 1 || items[0].topic != "追加質問" {
+		t.Fatalf("approved topic should be excluded: %v, %v", items, err)
+	}
+}
+
+func TestClarificationSupersededCommentNotCarried(t *testing.T) {
+	root, original, _ := clarificationFixture(t)
+	revised, err := saveProposal(root, []item{{topic: "未確認"}, {topic: "改訂済み"}}, original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeReview(t, revised, []item{{topic: "未確認"}, {topic: "改訂済み", answer: "Approved"}})
 	t.Setenv("CLARIFY_OUTPUT", `[]`)
 	items, _, err := clarificationQuestions(root, original, "fx")
 	if err != nil || len(items) != 1 || items[0].topic != "未確認" {
-		t.Fatalf("pending was not carried: %v, %v", items, err)
+		t.Fatalf("superseded comment carried: %v, %v", items, err)
+	}
+}
+
+func TestClarificationFullWithCarriedItemsSkipsEngine(t *testing.T) {
+	root, original, promptFile := clarificationFixture(t)
+	items := make([]item, 10)
+	for i := range items {
+		items[i] = item{topic: "質問" + strconv.Itoa(i), answer: "再確認", comment: true}
+	}
+	// Exercise the history processor directly; it has already been validated by the caller.
+	questions, _, err := clarificationQuestionsFromHistory(root, []reviewStep{{path: original, items: items}}, "依頼", "fx", "Checking additional questions", io.Discard)
+	if err != nil || len(questions) != 10 {
+		t.Fatalf("carried limit: %v, %v", questions, err)
+	}
+	if _, err := os.Stat(promptFile); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("engine called at limit: %v", err)
+	}
+	items = append(items, item{topic: "超過"})
+	if _, _, err := clarificationQuestionsFromHistory(root, []reviewStep{{path: original, items: items}}, "依頼", "fx", "Checking additional questions", io.Discard); err == nil || !strings.Contains(err.Error(), "exceeds 10") {
+		t.Fatalf("expected limit error: %v", err)
 	}
 }
 
