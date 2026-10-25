@@ -37,7 +37,7 @@ Existing links are not overwritten. Run `/reload` if Pi is already open. Re-run 
 
 ## Commands
 
-Run inside a Git repository. Displayed paths are abbreviated within the repository: the common `prop-review-tmp/` prefix is omitted, so a proposal appears as `review.xxx/proposal.txt`. The actual file remains under `prop-review-tmp/`; include that prefix when passing a path back to the CLI. `prev` is a shorter name accepting the same commands and arguments as `prop-review` (for example, `prev spec`). `generate`, `issue`, `revise`, `clarify`, and `spec` use its `prop-review-tmp/` directory.
+Run inside a Git repository. Displayed paths are abbreviated within the repository: the common `prop-review-tmp/` prefix is omitted, so a proposal appears as `review.xxx/proposal.txt`. The actual file remains under `prop-review-tmp/`; include that prefix when passing a path back to the CLI. `prev` is a shorter name accepting the same commands and arguments as `prop-review` (for example, `prev spec`). `generate`, `issue`, `revise`, `clarify`, `spec`, and `ingest` use its `prop-review-tmp/` directory.
 
 ### `prop-review` / `prop-review proposal.txt [result.txt]`
 
@@ -50,6 +50,15 @@ prop-review proposal.txt /path/to/result.txt
 ```
 
 Enter `a` then Enter to approve, `c` then Enter to comment, Enter alone to leave unconfirmed, `b` then Enter to go back, or `q` then Enter to quit without saving. Fullwidth Latin keys work too. An empty comment warns that the item remains unconfirmed (Enter to confirm, Esc to return). Request and comment entry support Left/Right, Home/End, and Backspace; comments are limited to 1 MiB. Results go beside the proposal as `proposal.review.txt` by default and their path is printed. Existing results are never overwritten. A custom result path works for review, but cannot be used in `revise` or `spec` history.
+
+### `prop-review ingest [NAME]`
+
+```sh
+prop-review ingest          # Start the configured engine (pi by default)
+prop-review ingest claude   # Override for this launch; also fx, codex, agy, opencode
+```
+
+Start an interactive agent in this Git repository and ask it to follow `prop-review-ingest`: select the latest completed review by `proposal.txt` modification time, validate its history, report the result, and answer comments in chat. If no completed review exists, the agent asks for a result path. Neither the CLI nor the skill edits review files or starts implementation. Install and authenticate the agent CLI first. The skill must be available at `~/.agents/skills/prop-review-ingest/SKILL.md` or `~/.pi/agent/skills/prop-review-ingest/SKILL.md` (the Pi setup above installs the latter); other agents are given its path explicitly. `fx` has no interactive initial-prompt option: it runs `fx ask --prompt-permissions` to save the first turn, then `fx --continue` to enter that session. Agent-specific settings and tool permissions still apply; `ingest` does not sandbox agents.
 
 ### `prop-review generate`
 
@@ -108,7 +117,7 @@ prop-review engine       # Print current engine
 prop-review --engine pi  # Also accepts fx, claude, codex, agy, opencode
 ```
 
-The engine setting is per user (`prop-review/engine` in the OS user config directory), defaults to `pi`, and applies across repositories. Install and authenticate the chosen CLI. Pi uses Node.js and the global npm package `@earendil-works/pi-coding-agent` via its SDK, not the `pi` CLI.
+The engine setting is per user (`prop-review/engine` in the OS user config directory), defaults to `pi`, and applies across repositories. Install and authenticate the chosen CLI. Proposal generation uses Node.js and the global npm package `@earendil-works/pi-coding-agent` via its SDK, not the `pi` CLI; `ingest` starts the selected agent's interactive CLI.
 
 ## File format and review history
 

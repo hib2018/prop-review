@@ -17,6 +17,29 @@ import (
 )
 
 func run(args []string) error {
+	if len(args) > 0 && args[0] == "ingest" {
+		if len(args) > 2 {
+			return errors.New("usage: prop-review ingest [fx|pi|claude|codex|agy|opencode]")
+		}
+		engine := ""
+		if len(args) == 2 {
+			engine = args[1]
+		} else {
+			var err error
+			engine, err = selectedEngine()
+			if err != nil {
+				return err
+			}
+		}
+		if !validEngine(engine) {
+			return errors.New("usage: prop-review ingest [fx|pi|claude|codex|agy|opencode]")
+		}
+		root, err := repoRoot()
+		if err != nil {
+			return err
+		}
+		return ingest(root, engine)
+	}
 	if len(args) > 0 && args[0] == "delete" {
 		if len(args) != 1 {
 			return errors.New("usage: prop-review delete")
@@ -81,7 +104,7 @@ func run(args []string) error {
 		return generate(args[0] == "revise", engine, "")
 	}
 	if len(args) > 2 {
-		return errors.New("usage: prop-review [delete|engine|--engine fx|pi|claude|codex|agy|opencode|generate|clarify|spec|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
+		return errors.New("usage: prop-review [ingest [fx|pi|claude|codex|agy|opencode]|delete|engine|--engine fx|pi|claude|codex|agy|opencode|generate|clarify|spec|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
 	}
 	if len(args) == 0 {
 		root, err := repoRoot()

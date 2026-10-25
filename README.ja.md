@@ -37,7 +37,7 @@ done
 
 ## コマンド
 
-Gitリポジトリ内で実行します。画面上ではリポジトリ内のパスを短く表示し、`prop-review-tmp/` 以下は共通部分を省いて `review.xxx/proposal.txt` のように表示します。実際のファイルは `prop-review-tmp/` 以下にあり、コマンドへパスを直接渡す際にはその接頭辞が必要です。`prev` は `prop-review` と同じコマンド・引数を受け付ける短縮名です（例: `prev spec`）。`generate`、`issue`、`revise`、`clarify`、`spec` はリポジトリの `prop-review-tmp/` を使用します。
+Gitリポジトリ内で実行します。画面上ではリポジトリ内のパスを短く表示し、`prop-review-tmp/` 以下は共通部分を省いて `review.xxx/proposal.txt` のように表示します。実際のファイルは `prop-review-tmp/` 以下にあり、コマンドへパスを直接渡す際にはその接頭辞が必要です。`prev` は `prop-review` と同じコマンド・引数を受け付ける短縮名です（例: `prev spec`）。`generate`、`issue`、`revise`、`clarify`、`spec`、`ingest` はリポジトリの `prop-review-tmp/` を使用します。
 
 ### `prop-review` / `prop-review proposal.txt [result.txt]`
 
@@ -50,6 +50,15 @@ prop-review proposal.txt /path/to/result.txt
 ```
 
 `a` + Enterで承認、`c` + Enterでコメント、Enterだけで未確認、`b` + Enterで戻り、`q` + Enterで保存せず終了します。全角ラテン文字キーにも対応します。コメントが空の場合は未確認になることを警告し、Enterで確定、Escで戻れます。依頼文・コメント入力は左右キー、Home/End、Backspaceに対応し、コメントの上限は1 MiBです。結果は通常、提案の隣の `proposal.review.txt` に保存し、パスを表示します。既存結果は上書きしません。別の結果パスを指定できますが、その結果は `revise` や `spec` の履歴には使えません。
+
+### `prop-review ingest [NAME]`
+
+```sh
+prop-review ingest          # 設定済みエンジンを起動（初期値はpi）
+prop-review ingest claude   # 今回だけ変更。fx、codex、agy、opencodeも指定可能
+```
+
+このGitリポジトリで対話型エージェントを起動し、`prop-review-ingest` に従って最新の完了済みレビュー（`proposal.txt` の更新時刻で選択）の履歴を検証し、結果の報告とコメントへの回答をチャットで行います。結果がなければエージェントが結果ファイルのパスを尋ねます。CLIとスキルはレビュー結果を変更せず、実装も開始しません。対象のCLIをインストール・認証してください。スキルは `~/.agents/skills/prop-review-ingest/SKILL.md` または `~/.pi/agent/skills/prop-review-ingest/SKILL.md` に配置します（上記のPiセットアップは後者）。他のエージェントにはスキルのパスを明示して渡します。`fx` は対話起動時の初期プロンプト指定に対応しないため、`fx ask --prompt-permissions` で初回応答を保存し、`fx --continue` でそのセッションを開きます。各エージェントの設定・ツール権限が適用され、`ingest` 自体はサンドボックスを設定しません。
 
 ### `prop-review generate`
 
@@ -108,7 +117,7 @@ prop-review engine       # 現在のエンジンを表示
 prop-review --engine pi  # fx、claude、codex、agy、opencodeも指定可能
 ```
 
-エンジンはユーザー単位の設定（OSのユーザー設定ディレクトリ内の `prop-review/engine`）で、初期値は `pi` です。変更すると他のリポジトリでも使われます。使用するCLIのインストールと認証が必要です。PiはNode.jsとグローバルnpmパッケージ `@earendil-works/pi-coding-agent` のSDKを使用し、`pi` CLIを直接呼びません。
+エンジンはユーザー単位の設定（OSのユーザー設定ディレクトリ内の `prop-review/engine`）で、初期値は `pi` です。変更すると他のリポジトリでも使われます。使用するCLIのインストールと認証が必要です。提案生成でPiを使う際はNode.jsとグローバルnpmパッケージ `@earendil-works/pi-coding-agent` のSDKを使用し、`pi` CLIを直接呼びません。`ingest` は選択したエージェントの対話型CLIを起動します。
 
 ## ファイル形式と履歴
 
