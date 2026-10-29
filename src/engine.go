@@ -41,14 +41,14 @@ func selectedEngine() (string, error) {
 	}
 	engine := strings.TrimSpace(string(data))
 	if !validEngine(engine) {
-		return "", fmt.Errorf("invalid engine setting: %s", path)
+		return "", fmt.Errorf("invalid engine setting: %s; select pi or fx with prop-review --engine NAME", path)
 	}
 	return engine, nil
 }
 
 func setEngine(engine string) error {
 	if !validEngine(engine) {
-		return errors.New("usage: prop-review --engine fx|pi|claude|codex|agy|opencode")
+		return errors.New("usage: prop-review --engine pi|fx")
 	}
 	path, err := enginePath()
 	if err != nil {
@@ -78,7 +78,7 @@ func setEngine(engine string) error {
 
 func validEngine(engine string) bool {
 	switch engine {
-	case "fx", "pi", "claude", "codex", "agy", "opencode":
+	case "pi", "fx":
 		return true
 	}
 	return false
@@ -90,7 +90,6 @@ var piSDK string
 const maxEngineOutputBytes = 16 << 20
 const maxEngineErrorBytes = 64 << 10
 const maxNpmOutputBytes = 8 << 10
-const maxOpenCodeTextBytes = 12 << 20
 
 type limitedCapture struct {
 	buf      bytes.Buffer
@@ -115,22 +114,6 @@ func (c *limitedCapture) Write(p []byte) (int, error) {
 
 func (c *limitedCapture) String() string { return c.buf.String() }
 func (c *limitedCapture) Bytes() []byte  { return c.buf.Bytes() }
-
-func readLimitedFile(path string, limit int) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))
-	if err != nil {
-		return nil, err
-	}
-	if len(data) > limit {
-		return nil, fmt.Errorf("result file exceeds %d bytes", limit)
-	}
-	return data, nil
-}
 
 // Engines return only a JSON array of proposal strings; never trust it as a proposal file.
 func proposals(root, prompt, engine string) ([]item, error) {
@@ -178,10 +161,9 @@ func engineResponse(root, prompt, engine string, timeout time.Duration, progress
 	defer cancel()
 	defer startSpinner(progress, activity, engine)()
 	var cmd *exec.Cmd
-	var resultFile string
 	switch engine {
 	case "fx":
-		cmd = exec.CommandContext(ctx, "fx", "ask", "--no-save")
+		cmd = exec.CommandContext(ctx, "fx", "ask", "--no-save", "--json")
 		cmd.Stdin = strings.NewReader(prompt)
 	case "pi":
 		npm := exec.CommandContext(ctx, "npm", "root", "-g")
@@ -204,32 +186,6 @@ func engineResponse(root, prompt, engine string, timeout time.Duration, progress
 		}
 		cmd = exec.CommandContext(ctx, "node", "--input-type=module", "-e", piSDK, strings.TrimSpace(modules.String()))
 		cmd.Stdin = strings.NewReader(prompt)
-	case "claude":
-		cmd = exec.CommandContext(ctx, "claude", "--print", "--restricted", "--strict-mcp-config", "--tools", "Read,Glob,Grep", "--permission-prompts", "none", "--no-session-persistence", "--output-format", "text")
-		cmd.Stdin = strings.NewReader(prompt)
-	case "codex":
-		f, err := os.CreateTemp("", "prop-review-codex-*")
-		if err != nil {
-			return nil, err
-		}
-		resultFile = f.Name()
-		if err := f.Close(); err != nil {
-			os.Remove(resultFile)
-			return nil, err
-		}
-		defer os.Remove(resultFile)
-		cmd = exec.CommandContext(ctx, "codex", "exec", "--sandbox", "read-only", "--ephemeral", "-c", `approval_policy="never"`, "--output-last-message", resultFile, "-")
-		cmd.Stdin = strings.NewReader(prompt)
-	case "agy":
-		cmd = exec.CommandContext(ctx, "agy", "--print", "--mode", "plan", "--sandbox", "--disable-slash-commands", "--output-format", "text")
-		cmd.Stdin = strings.NewReader(prompt)
-	case "opencode":
-		// OpenCode accepts its prompt as an argument, unlike the other engines.
-		if len(prompt) > 100000 {
-			return nil, errors.New("opencode prompt exceeds command-line argument limit")
-		}
-		cmd = exec.CommandContext(ctx, "opencode", "run", "--standalone", "--agent", "prop-review", "--format", "json", prompt)
-		cmd.Env = append(os.Environ(), `OPENCODE_CONFIG_CONTENT={"agent":{"prop-review":{"mode":"primary","permission":{"*":"deny","read":{"*":"allow","*.env":"deny","*.env.*":"deny"},"glob":"allow","grep":"allow"}}}}`)
 	default:
 		return nil, fmt.Errorf("unknown engine: %s", engine)
 	}
@@ -252,17 +208,8 @@ func engineResponse(root, prompt, engine string, timeout time.Duration, progress
 		return nil, fmt.Errorf("%s failed: %w: %s", engine, err, strings.TrimSpace(stderr.String()))
 	}
 	output := stdout.Bytes()
-	switch engine {
-	case "codex":
-		output, err = readLimitedFile(resultFile, maxEngineOutputBytes)
-		if err != nil {
-			return nil, fmt.Errorf("read codex response: %w", err)
-		}
-	case "opencode":
-		output, err = opencodeResponse(output)
-		if err != nil {
-			return nil, err
-		}
+	if engine == "fx" {
+		return fxResponse(output)
 	}
 	return output, nil
 }
@@ -292,42 +239,23 @@ func startSpinner(progress io.Writer, activity, engine string) func() {
 	return func() { once.Do(func() { close(done); <-finished }) }
 }
 
-func opencodeResponse(output []byte) ([]byte, error) {
-	if len(output) > maxEngineOutputBytes {
-		return nil, fmt.Errorf("opencode events exceed %d bytes", maxEngineOutputBytes)
+// fx's output includes intermediate commentary; only final_output is a task result.
+func fxResponse(output []byte) ([]byte, error) {
+	var response struct {
+		FinalOutput *string `json:"final_output"`
+		ExitCode    *int    `json:"exit_code"`
 	}
-	var text strings.Builder
-	var messageID string
-	decoder := json.NewDecoder(strings.NewReader(string(output)))
-	for decoder.More() {
-		var event struct {
-			Type string `json:"type"`
-			Part struct {
-				Type      string `json:"type"`
-				Text      string `json:"text"`
-				MessageID string `json:"messageID"`
-			} `json:"part"`
-		}
-		if err := decoder.Decode(&event); err != nil {
-			return nil, fmt.Errorf("invalid opencode events: %w", err)
-		}
-		if event.Type == "error" {
-			return nil, errors.New("opencode reported an error")
-		}
-		if event.Type != "text" || event.Part.Type != "text" {
-			continue
-		}
-		if event.Part.MessageID != "" && event.Part.MessageID != messageID {
-			text.Reset()
-			messageID = event.Part.MessageID
-		}
-		if len(event.Part.Text) > maxOpenCodeTextBytes-text.Len() {
-			return nil, fmt.Errorf("opencode text exceeds %d bytes", maxOpenCodeTextBytes)
-		}
-		text.WriteString(event.Part.Text)
+	if err := json.Unmarshal(output, &response); err != nil {
+		return nil, fmt.Errorf("invalid fx response JSON: %w", err)
 	}
-	if text.Len() == 0 {
-		return nil, errors.New("opencode returned no text response")
+	if response.ExitCode == nil {
+		return nil, errors.New("fx response is missing exit_code")
 	}
-	return []byte(text.String()), nil
+	if *response.ExitCode != 0 {
+		return nil, fmt.Errorf("fx reported exit_code %d", *response.ExitCode)
+	}
+	if response.FinalOutput == nil || strings.TrimSpace(*response.FinalOutput) == "" {
+		return nil, errors.New("fx response has no completed final_output")
+	}
+	return []byte(*response.FinalOutput), nil
 }

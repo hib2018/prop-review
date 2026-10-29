@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,94 +9,86 @@ import (
 	"time"
 )
 
-func TestAdditionalEngines(t *testing.T) {
+func TestSupportedEngines(t *testing.T) {
 	config := t.TempDir()
 	t.Setenv("HOME", config)
 	t.Setenv("XDG_CONFIG_HOME", config)
-	bin := t.TempDir()
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	args := filepath.Join(bin, "args")
-	input := filepath.Join(bin, "input")
-	t.Setenv("ARGS", args)
-	t.Setenv("INPUT", input)
-	for name, script := range map[string]string{
-		"claude":   "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGS\"\ncat > \"$INPUT\"\nprintf '%s\\n' '[\"Claude案\"]'\n",
-		"codex":    "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGS\"\ncat > \"$INPUT\"\nprev=''\nfor arg do if [ \"$prev\" = '--output-last-message' ]; then printf '%s\\n' '[\"Codex案\"]' > \"$arg\"; fi; prev=$arg; done\n",
-		"agy":      "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGS\"\ncat > \"$INPUT\"\nprintf '%s\\n' '[\"Antigravity案\"]'\n",
-		"opencode": "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGS\"\nprintf '%s' \"$OPENCODE_CONFIG_CONTENT\" > \"$INPUT\"\nprintf '%s\\n' '{\"type\":\"step_start\"}' '{\"type\":\"text\",\"part\":{\"type\":\"text\",\"messageID\":\"last\",\"text\":\"[\\\"OpenCode案\\\"]\"}}'\n",
-	} {
-		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0700); err != nil {
+	if got, err := selectedEngine(); err != nil || got != "pi" {
+		t.Fatalf("default: %q, %v", got, err)
+	}
+	for _, engine := range []string{"pi", "fx"} {
+		if err := setEngine(engine); err != nil {
 			t.Fatal(err)
 		}
+		if got, err := selectedEngine(); err != nil || got != engine {
+			t.Fatalf("engine: %q, %v", got, err)
+		}
 	}
-	for _, tc := range []struct {
-		name, topic string
-		flags       []string
-	}{
-		{"claude", "Claude案", []string{"--print", "--restricted", "--tools", "Read,Glob,Grep", "--no-session-persistence"}},
-		{"codex", "Codex案", []string{"exec", "--sandbox", "read-only", "--ephemeral", "--output-last-message"}},
-		{"agy", "Antigravity案", []string{"--print", "--mode", "plan", "--sandbox", "--disable-slash-commands", "--output-format", "text"}},
-		{"opencode", "OpenCode案", []string{"run", "--standalone", "--agent", "prop-review", "--format", "json", "prompt"}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if err := setEngine(tc.name); err != nil {
-				t.Fatal(err)
-			}
-			if got, err := selectedEngine(); err != nil || got != tc.name {
-				t.Fatalf("engine: %q, %v", got, err)
-			}
-			items, err := proposals(t.TempDir(), "prompt", tc.name)
-			if err != nil || len(items) != 1 || items[0].topic != tc.topic {
-				t.Fatalf("proposals: %v, %v", items, err)
-			}
-			data, err := os.ReadFile(args)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, flag := range tc.flags {
-				if !strings.Contains(string(data), flag+"\n") {
-					t.Errorf("missing %q in %s", flag, data)
-				}
-			}
-			inputData, err := os.ReadFile(input)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if tc.name == "opencode" {
-				for _, field := range []string{`"*":"deny"`, `"read":{"*":"allow","*.env":"deny","*.env.*":"deny"}`, `"glob":"allow"`, `"grep":"allow"`} {
-					if !strings.Contains(string(inputData), field) {
-						t.Errorf("missing policy %s: %s", field, inputData)
-					}
-				}
-			} else if string(inputData) != "prompt" {
-				t.Errorf("stdin: %q", inputData)
-			}
-		})
+	for _, engine := range []string{"claude", "codex", "agy", "opencode", "gemini", "", "PI"} {
+		if validEngine(engine) {
+			t.Fatalf("accepted engine %q", engine)
+		}
+		if err := setEngine(engine); err == nil {
+			t.Fatalf("saved unsupported engine %q", engine)
+		}
+		if _, err := engineResponse(t.TempDir(), "prompt", engine, time.Second, io.Discard, "test"); err == nil {
+			t.Fatalf("ran unsupported engine %q", engine)
+		}
 	}
-	if err := setEngine("gemini"); err == nil {
-		t.Fatal("obsolete gemini engine is still selectable")
+	path, err := enginePath()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := proposalsWithTimeout(t.TempDir(), strings.Repeat("x", 100001), "opencode", time.Second, os.Stderr); err == nil {
-		t.Fatal("accepted oversized opencode argument")
+	if err := os.WriteFile(path, []byte("codex\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := selectedEngine(); err == nil || !strings.Contains(err.Error(), "select pi or fx") {
+		t.Fatalf("invalid saved engine: %v", err)
+	}
+	if err := setEngine("pi"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := selectedEngine(); err != nil || got != "pi" {
+		t.Fatalf("recovery: %q, %v", got, err)
 	}
 }
 
-func TestOpenCodeEvents(t *testing.T) {
-	for _, tc := range []struct{ events, want string }{
-		{`{"type":"text","part":{"type":"text","messageID":"a","text":"draft"}}
-{"type":"text","part":{"type":"text","messageID":"b","text":"[\"final\"]"}}`, `["final"]`},
-		{`{"type":"text","part":{"type":"text","text":"["}}
-{"type":"text","part":{"type":"text","text":"\"ok\"]"}}`, `["ok"]`},
+func TestFxResponse(t *testing.T) {
+	for _, tc := range []struct{ name, response, want string }{
+		{"final only", `{"output":"Checking files...\n[\"old\"]","final_output":"[\"完成案\"]","exit_code":0,"usage":{}}`, `["完成案"]`},
+		{"markdown memo", `{"output":"Reading...","final_output":"## メモ\n\n承認事項のみ。\n","exit_code":0}`, "## メモ\n\n承認事項のみ。\n"},
 	} {
-		got, err := opencodeResponse([]byte(tc.events))
-		if err != nil || string(got) != tc.want {
-			t.Fatalf("events: %q, %v", got, err)
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := fxResponse([]byte(tc.response))
+			if err != nil || string(got) != tc.want {
+				t.Fatalf("response: %q, %v", got, err)
+			}
+		})
+	}
+	for _, response := range []string{
+		`not JSON`, `["legacy raw proposals"]`, `null`, `{"final_output":"[]"}`,
+		`{"final_output":"[]","exit_code":null}`, `{"final_output":"[]","exit_code":1}`,
+		`{"final_output":[],"exit_code":0}`, `{"final_output":"[]","exit_code":"0"}`,
+		`{"output":"[\"draft\"]","exit_code":0}`, `{"final_output":null,"exit_code":0}`,
+		`{"final_output":" \n\t","exit_code":0}`, `{"final_output":"[]","exit_code":0} trailing`,
+	} {
+		if _, err := fxResponse([]byte(response)); err == nil {
+			t.Fatalf("accepted %s", response)
 		}
 	}
-	for _, bad := range []string{"broken", `{"type":"step_start"}`, `{"type":"text","part":{"type":"text","text":"[\"old\"]"}}
-{"type":"error"}`} {
-		if _, err := opencodeResponse([]byte(bad)); err == nil {
-			t.Fatalf("accepted %q", bad)
+}
+
+func TestFxFinalOutputStillValidated(t *testing.T) {
+	bin := t.TempDir()
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("FX_RESPONSE", fxJSON(t, `["ok"]`))
+	if err := os.WriteFile(filepath.Join(bin, "fx"), []byte("#!/bin/sh\ncat >/dev/null\nprintf '%s' \"$FX_RESPONSE\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, final := range []string{`not-json`, `[]`, `["same","same"]`, `[" padded "]`, `["line\nbreak"]`} {
+		t.Setenv("FX_RESPONSE", fxJSON(t, final))
+		if _, err := proposals(t.TempDir(), "prompt", "fx"); err == nil {
+			t.Fatalf("accepted final_output %q", final)
 		}
 	}
 }

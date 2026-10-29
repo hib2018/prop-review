@@ -37,10 +37,15 @@ func TestFXAndRevision(t *testing.T) {
 	stdinPath := filepath.Join(bin, "stdin")
 	t.Setenv("FX_ARGS", argsPath)
 	t.Setenv("FX_STDIN", stdinPath)
-	t.Setenv("FX_OUTPUT", `["改訂案"]`)
+	t.Setenv("FX_OUTPUT", fxJSON(t, `["改訂案"]`))
 	items, err := proposals(root, "prompt", "fx")
 	if err != nil || len(items) != 1 || items[0].topic != "改訂案" {
 		t.Fatalf("fx: %v, %v", items, err)
+	}
+	// Accumulated output may contain commentary; only final_output is a proposal payload.
+	t.Setenv("FX_OUTPUT", `{"output":"Thinking through the request...\n[\"Not the final proposal\"]","final_output":"[\"改訂案\"]","exit_code":0}`)
+	if items, err := proposals(root, "prompt", "fx"); err != nil || len(items) != 1 || items[0].topic != "改訂案" {
+		t.Fatalf("fx final_output: %v, %v", items, err)
 	}
 	longPrompt := strings.Repeat("あ", maxCommentBytes/3)
 	if _, err := proposals(root, longPrompt, "fx"); err != nil {
@@ -55,17 +60,17 @@ func TestFXAndRevision(t *testing.T) {
 		ten = append(ten, "提案"+strconv.Itoa(i))
 	}
 	valid, _ := json.Marshal(ten)
-	t.Setenv("FX_OUTPUT", string(valid))
+	t.Setenv("FX_OUTPUT", fxJSON(t, string(valid)))
 	if items, err := proposals(root, "prompt", "fx"); err != nil || len(items) != 10 {
 		t.Fatalf("10 distinct proposals should be valid: %d, %v", len(items), err)
 	}
 	for _, bad := range []string{`[]`, `[` + strings.Repeat(`"提案",`, 10) + `"提案"]`, `["bad\nline"]`, `["承認", ""]`, `not-json`, `["文字化け�"]`, `["safe\u001b[2J"]`} {
-		t.Setenv("FX_OUTPUT", bad)
+		t.Setenv("FX_OUTPUT", fxJSON(t, bad))
 		if _, err := proposals(root, "prompt", "fx"); err == nil {
 			t.Fatalf("accepted %q", bad)
 		}
 	}
-	t.Setenv("FX_OUTPUT", `["改訂案"]`)
+	t.Setenv("FX_OUTPUT", fxJSON(t, `["改訂案"]`))
 	original := []item{{topic: "承認案"}, {topic: "コメント案"}, {topic: "保留案"}}
 	path, err := saveProposal(root, original, "")
 	if err != nil {
@@ -106,7 +111,7 @@ func TestFXAndRevision(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(filepath.Dir(newPath), "proposal.review.txt"), []byte(render([]item{{topic: "改訂案", answer: "again", comment: true}})), 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("FX_OUTPUT", `["再改訂案"]`)
+	t.Setenv("FX_OUTPUT", fxJSON(t, `["再改訂案"]`))
 	if err := run([]string{"revise"}); err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +124,7 @@ func TestFXAndRevision(t *testing.T) {
 		t.Fatalf("second revision parent: %q, %v", link, err)
 	}
 	args, err := os.ReadFile(argsPath)
-	if err != nil || strings.TrimSpace(string(args)) != "ask --no-save" {
+	if err != nil || strings.TrimSpace(string(args)) != "ask --no-save --json" {
 		t.Fatalf("fx args: %s, %v", args, err)
 	}
 	stdin, err = os.ReadFile(stdinPath)
@@ -153,7 +158,7 @@ func TestRevisionSelectionAndExplicitPaths(t *testing.T) {
 	}
 	bin := t.TempDir()
 	called := filepath.Join(bin, "called")
-	if err := os.WriteFile(filepath.Join(bin, "fx"), []byte("#!/bin/sh\nprintf 'called' > \"$FX_CALLED\"\nprintf '[\"Revised\"]\\n'\n"), 0700); err != nil {
+	if err := os.WriteFile(filepath.Join(bin, "fx"), []byte("#!/bin/sh\nprintf 'called' > \"$FX_CALLED\"\nprintf '%s\\n' '"+fxJSON(t, `["Revised"]`)+"'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -299,7 +304,7 @@ func TestIssueSelectionAndGeneration(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" > \"$GH_ARGS\"\nprintf '%s\\n' \"$GH_OUTPUT\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(bin, "fx"), []byte("#!/bin/sh\ncat > \"$FX_STDIN\"\nprintf '[\"Propose a display fix\"]\\n'\n"), 0700); err != nil {
+	if err := os.WriteFile(filepath.Join(bin, "fx"), []byte("#!/bin/sh\ncat > \"$FX_STDIN\"\nprintf '%s\\n' '"+fxJSON(t, `["Propose a display fix"]`)+"'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -508,7 +513,7 @@ func TestEngineTimeout(t *testing.T) {
 	if time.Since(start) > 2500*time.Millisecond || !strings.HasPrefix(progress.String(), "⠋ Generating proposals with fx...") || !strings.Contains(progress.String(), "\r⠙ Generating proposals with fx...") || !strings.HasSuffix(progress.String(), "\n") || strings.Contains(progress.String(), "1s") {
 		t.Fatalf("elapsed: %s, progress: %q", time.Since(start), progress.String())
 	}
-	if err := os.WriteFile(filepath.Join(bin, "fx"), []byte("#!/bin/sh\nprintf '[\"Ready\"]\\n'\n"), 0700); err != nil {
+	if err := os.WriteFile(filepath.Join(bin, "fx"), []byte("#!/bin/sh\nprintf '%s\\n' '"+fxJSON(t, `["Ready"]`)+"'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	progress.Reset()

@@ -27,7 +27,7 @@ func clarificationFixture(t *testing.T) (string, string, string) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	prompt := filepath.Join(bin, "prompt")
 	t.Setenv("CLARIFY_PROMPT", prompt)
-	t.Setenv("CLARIFY_OUTPUT", `["追加で確認する？"]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `["追加で確認する？"]`))
 	original, err := saveProposalWithMetadata(root, []item{{topic: "承認事項"}, {topic: "未確認"}, {topic: "要改訂"}}, "", "元の依頼", false)
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +145,7 @@ func TestClarificationHistoryAndGeneration(t *testing.T) {
 
 func TestActivityProgress(t *testing.T) {
 	root, _, _ := clarificationFixture(t)
-	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `[]`))
 	var progress bytes.Buffer
 	_, err := proposalsWithActivity(root, "prompt", "fx", 5*time.Second, &progress, true, "Checking spec clarifications")
 	if err != nil || !strings.Contains(progress.String(), "Checking spec clarifications with fx...") || strings.Contains(progress.String(), "Generating proposals") {
@@ -156,7 +156,7 @@ func TestActivityProgress(t *testing.T) {
 func TestClarificationNoQuestionsAndInvalidHistory(t *testing.T) {
 	root, original, promptFile := clarificationFixture(t)
 	writeReview(t, original, []item{{topic: "承認事項", answer: "Approved"}, {topic: "未確認", answer: "Approved"}, {topic: "要改訂", answer: "Approved"}})
-	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `[]`))
 	items, _, err := clarificationQuestions(root, original, "fx")
 	if err != nil || len(items) != 0 {
 		t.Fatalf("empty: %v, %v", items, err)
@@ -173,7 +173,7 @@ func TestClarificationNoQuestionsAndInvalidHistory(t *testing.T) {
 		t.Fatal("empty result created a proposal")
 	}
 	for _, invalid := range []string{`null`, `not-json`, `["", "bad"]`} {
-		t.Setenv("CLARIFY_OUTPUT", invalid)
+		t.Setenv("CLARIFY_OUTPUT", fxJSON(t, invalid))
 		if _, _, err := clarificationQuestions(root, original, "fx"); err == nil {
 			t.Fatalf("accepted %s", invalid)
 		}
@@ -192,7 +192,7 @@ func TestClarificationNoQuestionsAndInvalidHistory(t *testing.T) {
 
 func TestClarificationCarriesCommentsWhenNoNewQuestions(t *testing.T) {
 	root, original, promptFile := clarificationFixture(t)
-	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `[]`))
 	items, parent, err := clarificationQuestions(root, original, "fx")
 	if err != nil || parent != original || len(items) != 2 || items[0].topic != "未確認" || items[1].topic != "要改訂" {
 		t.Fatalf("unresolved items not carried: %v, %s, %v", items, parent, err)
@@ -216,7 +216,7 @@ func TestClarificationRevisionAndFollowupStatuses(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeReview(t, followup, []item{{topic: "改訂済み", answer: "まだ", comment: true}, {topic: "追加質問"}})
-	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `[]`))
 	items, _, err := clarificationQuestions(root, original, "fx")
 	if err != nil || len(items) != 2 || items[0].topic != "改訂済み" || items[1].topic != "追加質問" {
 		t.Fatalf("revision/followup unresolved items: %v, %v", items, err)
@@ -235,7 +235,7 @@ func TestClarificationSupersededCommentNotCarried(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeReview(t, revised, []item{{topic: "未確認"}, {topic: "改訂済み", answer: "Approved"}})
-	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `[]`))
 	items, _, err := clarificationQuestions(root, original, "fx")
 	if err != nil || len(items) != 1 || items[0].topic != "未確認" {
 		t.Fatalf("superseded comment carried: %v, %v", items, err)

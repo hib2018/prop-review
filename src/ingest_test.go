@@ -14,31 +14,40 @@ func TestIngestLaunchesConfiguredOrExplicitEngine(t *testing.T) {
 		want   []string
 	}{
 		{"pi", []string{"pi", "--skill", "SKILL.md", "Invoke prop-review-ingest"}},
-		{"claude", []string{"claude", "Invoke prop-review-ingest"}},
-		{"codex", []string{"codex", "Invoke prop-review-ingest"}},
-		{"agy", []string{"agy", "--prompt-interactive", "Invoke prop-review-ingest"}},
-		{"opencode", []string{"opencode", "--prompt", "Invoke prop-review-ingest"}},
 		{"fx", []string{"fx", "ask", "--prompt-permissions", "Invoke prop-review-ingest", "fx", "--continue"}},
 	} {
 		t.Run(tc.engine, func(t *testing.T) {
 			root, log := ingestFixture(t)
+			checkLaunch := func() {
+				t.Helper()
+				data, err := os.ReadFile(log)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, part := range tc.want {
+					if !strings.Contains(string(data), part) {
+						t.Errorf("launch missing %q: %s", part, data)
+					}
+				}
+				if !strings.Contains(string(data), root) || !strings.Contains(string(data), "SKILL.md") {
+					t.Errorf("launch lacks root or skill: %s", data)
+				}
+				if tc.engine == "fx" {
+					lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+					if len(lines) != 9 || lines[0] != "fx" || lines[2] != "ask" || lines[3] != "--prompt-permissions" || lines[4] != "--" || !strings.HasPrefix(lines[5], "Invoke prop-review-ingest") || lines[6] != "fx" || lines[7] != lines[1] || lines[8] != "--continue" {
+						t.Fatalf("fx ingest must ask then continue without JSON or --no-save: %q", data)
+					}
+				}
+			}
 			if err := setEngine(tc.engine); err != nil {
 				t.Fatal(err)
 			}
 			if err := run([]string{"ingest"}); err != nil {
 				t.Fatal(err)
 			}
-			data, err := os.ReadFile(log)
-			if err != nil {
+			checkLaunch()
+			if err := os.Remove(log); err != nil {
 				t.Fatal(err)
-			}
-			for _, part := range tc.want {
-				if !strings.Contains(string(data), part) {
-					t.Errorf("launch missing %q: %s", part, data)
-				}
-			}
-			if !strings.Contains(string(data), root) || !strings.Contains(string(data), "SKILL.md") {
-				t.Errorf("launch lacks root or skill: %s", data)
 			}
 			if err := setEngine("pi"); err != nil {
 				t.Fatal(err)
@@ -46,6 +55,7 @@ func TestIngestLaunchesConfiguredOrExplicitEngine(t *testing.T) {
 			if err := run([]string{"ingest", tc.engine}); err != nil {
 				t.Fatalf("explicit engine: %v", err)
 			}
+			checkLaunch()
 		})
 	}
 }
@@ -110,7 +120,7 @@ func ingestFixture(t *testing.T) (string, string) {
 	}
 	t.Chdir(root)
 	bin := t.TempDir()
-	for _, engine := range []string{"pi", "claude", "codex", "agy", "opencode", "fx"} {
+	for _, engine := range []string{"pi", "fx"} {
 		program := "#!/bin/sh\nprintf '%s\\n' '" + engine + "' \"$PWD\" \"$@\" >> \"$INGEST_LOG\"\n[ \"$INGEST_FAIL\" != 1 ]\n"
 		if err := os.WriteFile(filepath.Join(bin, engine), []byte(program), 0700); err != nil {
 			t.Fatal(err)

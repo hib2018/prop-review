@@ -42,12 +42,6 @@ func ingest(root, engine string) error {
 	switch engine {
 	case "pi":
 		return launch("pi", "--skill", skill, prompt)
-	case "claude", "codex":
-		return launch(engine, prompt)
-	case "agy":
-		return launch("agy", "--prompt-interactive", prompt)
-	case "opencode":
-		return launch("opencode", "--prompt", prompt)
 	case "fx":
 		// fx has no interactive initial-prompt flag. Save the first turn, then resume it.
 		if err := launch("fx", "ask", "--prompt-permissions", "--", prompt); err != nil {

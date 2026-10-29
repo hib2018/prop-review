@@ -19,7 +19,7 @@ import (
 func run(args []string) error {
 	if len(args) > 0 && args[0] == "ingest" {
 		if len(args) > 2 {
-			return errors.New("usage: prop-review ingest [fx|pi|claude|codex|agy|opencode]")
+			return errors.New("usage: prop-review ingest [pi|fx]")
 		}
 		engine := ""
 		if len(args) == 2 {
@@ -32,7 +32,7 @@ func run(args []string) error {
 			}
 		}
 		if !validEngine(engine) {
-			return errors.New("usage: prop-review ingest [fx|pi|claude|codex|agy|opencode]")
+			return errors.New("usage: prop-review ingest [pi|fx]")
 		}
 		root, err := repoRoot()
 		if err != nil {
@@ -83,7 +83,7 @@ func run(args []string) error {
 	}
 	if len(args) > 0 && args[0] == "--engine" {
 		if len(args) != 2 {
-			return errors.New("usage: prop-review --engine fx|pi|claude|codex|agy|opencode")
+			return errors.New("usage: prop-review --engine pi|fx")
 		}
 		return setEngine(args[1])
 	}
@@ -104,7 +104,7 @@ func run(args []string) error {
 		return generate(args[0] == "revise", engine, "")
 	}
 	if len(args) > 2 {
-		return errors.New("usage: prop-review [ingest [fx|pi|claude|codex|agy|opencode]|delete|engine|--engine fx|pi|claude|codex|agy|opencode|generate|clarify|spec|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
+		return errors.New("usage: prop-review [ingest [pi|fx]|delete|engine|--engine pi|fx|generate|clarify|spec|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
 	}
 	if len(args) == 0 {
 		root, err := repoRoot()

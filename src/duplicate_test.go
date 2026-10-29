@@ -13,7 +13,7 @@ func TestDuplicateTopicsRejectedAtEveryEntry(t *testing.T) {
 	if _, err := parse(strings.NewReader(duplicate)); err == nil || !strings.Contains(err.Error(), "duplicate proposal topic") {
 		t.Fatalf("accepted duplicate proposal: %v", err)
 	}
-	t.Setenv("CLARIFY_OUTPUT", `["同じ項目","同じ項目"]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `["同じ項目","同じ項目"]`))
 	if _, err := proposals(root, "prompt", "fx"); err == nil || !strings.Contains(err.Error(), "duplicate proposal topic") {
 		t.Fatalf("accepted duplicate engine output: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestDuplicateTopicsRejectedAtEveryEntry(t *testing.T) {
 	if err := os.Remove(promptFile); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `[]`))
 	if _, _, err := clarificationQuestions(root, original, "fx"); err == nil {
 		t.Fatal("accepted approved/pending duplicate when engine would return []")
 	}
@@ -55,7 +55,7 @@ func TestDuplicateTopicsRejectedAtEveryEntry(t *testing.T) {
 func TestRevisionRejectsDuplicateGeneratedItems(t *testing.T) {
 	root, original, _ := clarificationFixture(t)
 	inFixtureRepo(t, root)
-	t.Setenv("CLARIFY_OUTPUT", `["未確認","未確認"]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `["未確認","未確認"]`))
 	if err := generate(true, "fx", original); err == nil || !strings.Contains(err.Error(), "duplicate proposal topic") {
 		t.Fatalf("accepted duplicate generated items: %v", err)
 	}

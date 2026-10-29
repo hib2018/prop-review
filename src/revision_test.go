@@ -12,7 +12,7 @@ func TestHolisticRevision(t *testing.T) {
 	root, original, promptFile := clarificationFixture(t)
 	inFixtureRepo(t, root)
 	// More output items than comments, changed pending wording, and reordered topics.
-	t.Setenv("CLARIFY_OUTPUT", `["新しい構成","未確認の再設計","分割した案","承認事項の言い換え"]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `["新しい構成","未確認の再設計","分割した案","承認事項の言い換え"]`))
 	if err := generate(true, "fx", original); err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestHolisticRevision(t *testing.T) {
 	if err != nil || len(history) != 2 || !history[1].restructure {
 		t.Fatalf("history: %v, %v", history, err)
 	}
-	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `[]`))
 	outstanding, _, err := clarificationQuestionsFromHistory(root, history, request, "fx", "test", io.Discard)
 	if err != nil || len(outstanding) != 4 {
 		t.Fatalf("outstanding: %v, %v", outstanding, err)
@@ -119,7 +119,7 @@ func TestReconstructionDoesNotTransferApproval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `[]`))
 	outstanding, _, err := clarificationQuestionsFromHistory(root, history, request, "fx", "test", io.Discard)
 	if err != nil || len(outstanding) != 2 {
 		t.Fatalf("current review suppressed by historical approval: %v, %v", outstanding, err)

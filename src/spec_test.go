@@ -15,7 +15,7 @@ func specFixtureEngine(t *testing.T, promptFile, output string) {
 	if err := os.WriteFile(bin, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SPEC_OUTPUT", output)
+	t.Setenv("SPEC_OUTPUT", fxJSON(t, output))
 }
 
 func inFixtureRepo(t *testing.T, root string) {
@@ -44,7 +44,7 @@ func TestSaveSpecAllReviewedChains(t *testing.T) {
 	}
 	writeReview(t, other, []item{{topic: "別の承認", answer: "Approved"}})
 	inFixtureRepo(t, root)
-	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `[]`))
 	var screen strings.Builder
 	if err := saveSpecWithConfirmation("fx", strings.NewReader("y\n"), &screen); err != nil {
 		t.Fatal(err)
@@ -86,7 +86,7 @@ func TestSaveSpecAllowsClarificationAndLegacyRoot(t *testing.T) {
 	}
 	writeReview(t, legacy, []item{{topic: "旧承認", answer: "Approved"}})
 	inFixtureRepo(t, root)
-	t.Setenv("CLARIFY_OUTPUT", `["追加確認"]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `["追加確認"]`))
 	if err := saveSpecWithConfirmation("fx", strings.NewReader("y\n"), io.Discard); err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestSaveSpecRejectsEmptySummary(t *testing.T) {
 	specFixtureEngine(t, promptFile, "")
 	writeReview(t, original, []item{{topic: "承認事項", answer: "Approved"}, {topic: "未確認"}, {topic: "要改訂", answer: "変更して", comment: true}})
 	inFixtureRepo(t, root)
-	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `[]`))
 	if err := saveSpecWithConfirmation("fx", strings.NewReader("y\n"), io.Discard); err == nil {
 		t.Fatal("accepted empty summary")
 	}
@@ -183,7 +183,7 @@ func TestSaveSpecExcludesBrokenChainBeforeConfirmation(t *testing.T) {
 		t.Fatal(err)
 	}
 	inFixtureRepo(t, root)
-	t.Setenv("CLARIFY_OUTPUT", `[]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `[]`))
 	output := filepath.Join(root, "prop-review-tmp", "spec.md")
 	var preview strings.Builder
 	if err := saveSpecWithConfirmation("fx", strings.NewReader("N\n"), &preview); err == nil {
@@ -221,7 +221,7 @@ func TestSaveSpecChecksValidChainDespiteBrokenUnrelatedLink(t *testing.T) {
 		t.Fatal(err)
 	}
 	inFixtureRepo(t, root)
-	t.Setenv("CLARIFY_OUTPUT", `["追加確認事項"]`)
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `["追加確認事項"]`))
 	var preview strings.Builder
 	if err := saveSpecWithConfirmation("fx", strings.NewReader("N\n"), &preview); err == nil {
 		t.Fatal("saved after N")
@@ -244,7 +244,7 @@ func TestSaveSpecContinuesAfterOneClarificationFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeReview(t, second, []item{{topic: "別の承認", answer: "Approved"}})
-	script := "#!/bin/sh\nprompt=$(cat)\nprintf '%s' \"$prompt\" > \"$CLARIFY_PROMPT\"\ncase \"$prompt\" in\n  *'Write a clear, concise Markdown reference memo'*) printf '承認事項と別の承認のメモ\\n' ;;\n  *'元の依頼'*) printf 'invalid-json\\n' ;;\n  *) printf '[]\\n' ;;\nesac\n"
+	script := "#!/bin/sh\nprompt=$(cat)\nprintf '%s' \"$prompt\" > \"$CLARIFY_PROMPT\"\ncase \"$prompt\" in\n  *'Write a clear, concise Markdown reference memo'*) printf '%s\\n' '" + fxJSON(t, "承認事項と別の承認のメモ") + "' ;;\n  *'元の依頼'*) printf 'invalid-json\\n' ;;\n  *) printf '%s\\n' '" + fxJSON(t, "[]") + "' ;;\nesac\n"
 	if err := os.WriteFile(filepath.Join(filepath.Dir(promptFile), "fx"), []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
