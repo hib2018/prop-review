@@ -22,7 +22,7 @@ for skill in prop-review prop-review-ingest; do
 done
 ```
 
-Pi以外で共有の `~/.agents/skills` を使う場合は、そこにもリンクできます。
+fxで共有の `~/.agents/skills` を使う場合は、そこにもリンクできます。
 
 ```sh
 mkdir -p "$HOME/.agents/skills"
@@ -55,10 +55,10 @@ prop-review proposal.txt /path/to/result.txt
 
 ```sh
 prop-review ingest          # 設定済みエンジンを起動（初期値はpi）
-prop-review ingest claude   # 今回だけ変更。fx、codex、agy、opencodeも指定可能
+prop-review ingest fx       # 今回だけ変更。piまたはfxのみ指定可能
 ```
 
-このGitリポジトリで対話型エージェントを起動し、`prop-review-ingest` に従って最新の完了済みレビュー（`proposal.txt` の更新時刻で選択）の履歴を検証し、結果の報告とコメントへの回答をチャットで行います。結果がなければエージェントが結果ファイルのパスを尋ねます。CLIとスキルはレビュー結果を変更せず、実装も開始しません。対象のCLIをインストール・認証してください。スキルは `~/.agents/skills/prop-review-ingest/SKILL.md` または `~/.pi/agent/skills/prop-review-ingest/SKILL.md` に配置します（上記のPiセットアップは後者）。他のエージェントにはスキルのパスを明示して渡します。`fx` は対話起動時の初期プロンプト指定に対応しないため、`fx ask --prompt-permissions` で初回応答を保存し、`fx --continue` でそのセッションを開きます。各エージェントの設定・ツール権限が適用され、`ingest` 自体はサンドボックスを設定しません。
+このGitリポジトリで対話型エージェントを起動し、`prop-review-ingest` に従って最新の完了済みレビュー（`proposal.txt` の更新時刻で選択）の履歴を検証し、結果の報告とコメントへの回答をチャットで行います。結果がなければエージェントが結果ファイルのパスを尋ねます。CLIとスキルはレビュー結果を変更せず、実装も開始しません。対象のCLIをインストール・認証してください。スキルは `~/.agents/skills/prop-review-ingest/SKILL.md` または `~/.pi/agent/skills/prop-review-ingest/SKILL.md` に配置します（上記のPiセットアップは後者）。fxにはスキルのパスを明示して渡します。`fx` は対話起動時の初期プロンプト指定に対応しないため、`fx ask --prompt-permissions` で初回応答を保存し、`fx --continue` でそのセッションを開きます。各エージェントの設定・ツール権限が適用され、`ingest` 自体はサンドボックスを設定しません。
 
 ### `prop-review generate`
 
@@ -114,10 +114,11 @@ prop-review delete
 
 ```sh
 prop-review engine       # 現在のエンジンを表示
-prop-review --engine pi  # fx、claude、codex、agy、opencodeも指定可能
+prop-review --engine pi  # piまたはfxのみ指定可能
+prop-review --engine fx
 ```
 
-エンジンはユーザー単位の設定（OSのユーザー設定ディレクトリ内の `prop-review/engine`）で、初期値は `pi` です。変更すると他のリポジトリでも使われます。使用するCLIのインストールと認証が必要です。提案生成でPiを使う際はNode.jsとグローバルnpmパッケージ `@earendil-works/pi-coding-agent` のSDKを使用し、`pi` CLIを直接呼びません。`ingest` は選択したエージェントの対話型CLIを起動します。
+対応エンジンは `pi` と `fx` だけです。エンジンはユーザー単位の設定（OSのユーザー設定ディレクトリ内の `prop-review/engine`）で、変更すると他のリポジトリでも使われます。設定がない場合の初期値は `pi` です。既存の保存済み設定が無効ならエラーとし、`prop-review --engine pi` または `prop-review --engine fx` で明示的に設定し直す必要があります。暗黙のフォールバックは行いません。使用するエンジンのインストールと認証が必要です。Piでの生成はNode.jsとグローバルnpmパッケージ `@earendil-works/pi-coding-agent` のSDKを使用し、`pi` CLIを直接呼びません。fxでの生成は `fx ask --no-save --json` を使い、JSON応答の `final_output` だけを読み取り、蓄積された出力は使いません。`ingest` は前述の方法で選択したエンジンの対話型CLIを起動します。
 
 ## ファイル形式と履歴
 
@@ -137,8 +138,8 @@ Approval/Comment:
 
 ## エンジンと失敗時の動作
 
-エンジンにはリポジトリの参照と提案の作成（`spec` では承認項目の要約）だけを指示し、実装は指示しません。応答は1～10件の単一行の提案を含むJSON配列として検証し、`clarify` のみ空配列も受け付けます。言語は自動検証しません。処理内容に応じたスピナーを標準エラー出力に表示し、100秒でタイムアウトします。外部CLIの標準出力・Codex結果ファイル・OpenCodeイベント列は各16 MiB、標準エラー出力は64 KiB、`npm root -g` の標準出力は8 KiB、OpenCodeの連結テキストは12 MiBに制限します。超過時は収集中にプロセスを停止し、明示的なエラーを返します。不正な応答・失敗・入力中断時に以前のファイルは上書きしません。
+エンジンにはリポジトリの参照と提案の作成（`spec` では承認項目の要約）だけを指示し、実装は指示しません。応答は1～10件の単一行の提案を含むJSON配列として検証し、`clarify` のみ空配列も受け付けます。言語は自動検証しません。処理内容に応じたスピナーを標準エラー出力に表示し、100秒でタイムアウトします。エンジンのプロセスの標準出力は16 MiB、標準エラー出力は64 KiB、`npm root -g` の標準出力は8 KiBに制限します。超過時は収集中にプロセスを停止し、明示的なエラーを返します。不正な応答・失敗・入力中断時に以前のファイルは上書きしません。
 
-Piは拡張・スキル・プロンプトテンプレートを無効にした読取専用セッション、Claudeは制限モードでRead/Glob/Grepのみ、Codexは読取専用サンドボックス、`agy` はplanモードと端末サンドボックス、OpenCodeはread/glob/grepのみを許可する専用エージェントを使います。`agy` はローカルセッション情報を保存する場合があります。OpenCodeはプロンプトをコマンド引数で渡すため100,000バイトを超えると拒否します。`fx ask --no-save` への指示だけではツール権限を強制できません。外部CLIの設定・フック・プラグインによる副作用には注意してください。
+Piでの生成は、拡張・スキル・プロンプトテンプレートを無効にした読取専用SDKセッションを使います。fxでの生成は `fx ask --no-save --json` を使い、`final_output` のみを採用し、蓄積された出力は使いません。指示だけではfxのツール権限を強制できません。fxのローカル設定・フック・プラグインによる副作用には注意してください。
 
 完了したレビュー結果をチャットに取り込み、コメントへの回答を得るには `prop-review-ingest` スキルを使います。`prop-review` スキルは提案生成とレビューへの引き渡しを扱います。承認はその項目だけへの判断であり、実装は自動開始しません。

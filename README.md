@@ -22,7 +22,7 @@ for skill in prop-review prop-review-ingest; do
 done
 ```
 
-For other agents using the shared `~/.agents/skills` directory, link the skills there too:
+For fx using the shared `~/.agents/skills` directory, link the skills there too:
 
 ```sh
 mkdir -p "$HOME/.agents/skills"
@@ -55,10 +55,10 @@ Enter `a` then Enter to approve, `c` then Enter to comment, Enter alone to leave
 
 ```sh
 prop-review ingest          # Start the configured engine (pi by default)
-prop-review ingest claude   # Override for this launch; also fx, codex, agy, opencode
+prop-review ingest fx       # Override for this launch; pi or fx only
 ```
 
-Start an interactive agent in this Git repository and ask it to follow `prop-review-ingest`: select the latest completed review by `proposal.txt` modification time, validate its history, report the result, and answer comments in chat. If no completed review exists, the agent asks for a result path. Neither the CLI nor the skill edits review files or starts implementation. Install and authenticate the agent CLI first. The skill must be available at `~/.agents/skills/prop-review-ingest/SKILL.md` or `~/.pi/agent/skills/prop-review-ingest/SKILL.md` (the Pi setup above installs the latter); other agents are given its path explicitly. `fx` has no interactive initial-prompt option: it runs `fx ask --prompt-permissions` to save the first turn, then `fx --continue` to enter that session. Agent-specific settings and tool permissions still apply; `ingest` does not sandbox agents.
+Start an interactive agent in this Git repository and ask it to follow `prop-review-ingest`: select the latest completed review by `proposal.txt` modification time, validate its history, report the result, and answer comments in chat. If no completed review exists, the agent asks for a result path. Neither the CLI nor the skill edits review files or starts implementation. Install and authenticate the agent CLI first. The skill must be available at `~/.agents/skills/prop-review-ingest/SKILL.md` or `~/.pi/agent/skills/prop-review-ingest/SKILL.md` (the Pi setup above installs the latter); fx is given its path explicitly. `fx` has no interactive initial-prompt option: it runs `fx ask --prompt-permissions` to save the first turn, then `fx --continue` to enter that session. Agent-specific settings and tool permissions still apply; `ingest` does not sandbox agents.
 
 ### `prop-review generate`
 
@@ -114,10 +114,11 @@ Choose among unreviewed proposals and reviewed proposals with comments but no ch
 
 ```sh
 prop-review engine       # Print current engine
-prop-review --engine pi  # Also accepts fx, claude, codex, agy, opencode
+prop-review --engine pi  # pi or fx only
+prop-review --engine fx
 ```
 
-The engine setting is per user (`prop-review/engine` in the OS user config directory), defaults to `pi`, and applies across repositories. Install and authenticate the chosen CLI. Proposal generation uses Node.js and the global npm package `@earendil-works/pi-coding-agent` via its SDK, not the `pi` CLI; `ingest` starts the selected agent's interactive CLI.
+Only `pi` and `fx` are supported. The engine setting is per user (`prop-review/engine` in the OS user config directory) and applies across repositories. When no setting exists, the default is `pi`. An existing invalid saved setting is an error: explicitly run `prop-review --engine pi` or `prop-review --engine fx` to replace it; there is no silent fallback. Install and authenticate the chosen engine. Pi generation requires Node.js and the global npm package `@earendil-works/pi-coding-agent` via its SDK, not the `pi` CLI. fx generation uses `fx ask --no-save --json` and reads only `final_output` from the JSON response, never accumulated output. `ingest` starts the selected engine's interactive CLI as described above.
 
 ## File format and review history
 
@@ -137,8 +138,8 @@ Result fields accept only an empty value (pending), `Approved`, or `Comment: "..
 
 ## Engines and failures
 
-Engines are asked to read the repository and propose changes (or summarize approved topics for `spec`), not implement them. Responses are validated as JSON arrays of 1–10 single-line proposals; only `clarify` also allows an empty array. Language is not programmatically validated. An activity-specific spinner is shown on stderr, with a 100-second timeout. External CLI stdout, Codex result files, and OpenCode event streams are capped at 16 MiB each; stderr at 64 KiB; `npm root -g` stdout at 8 KiB; and assembled OpenCode text at 12 MiB. Exceeding a stream limit stops the process during collection and returns an explicit error. Invalid responses, failures, and cancelled input never overwrite earlier files.
+Engines are asked to read the repository and propose changes (or summarize approved topics for `spec`), not implement them. Responses are validated as JSON arrays of 1–10 single-line proposals; only `clarify` also allows an empty array. Language is not programmatically validated. An activity-specific spinner is shown on stderr, with a 100-second timeout. Engine process stdout is capped at 16 MiB, stderr at 64 KiB, and `npm root -g` stdout at 8 KiB. Exceeding a stream limit stops the process during collection and returns an explicit error. Invalid responses, failures, and cancelled input never overwrite earlier files.
 
-Pi uses a read-only session with extensions, skills, and prompt templates disabled; Claude uses restricted mode with Read/Glob/Grep; Codex uses a read-only sandbox; `agy` uses plan mode and terminal sandboxing; OpenCode uses a dedicated agent restricted to read/glob/grep. `agy` may save local session data. OpenCode passes prompts as command arguments and rejects those over 100,000 bytes. Instructions to `fx ask --no-save` cannot enforce tool permissions. Local settings, hooks, and plugins of external CLIs may have side effects.
+Pi generation uses a read-only SDK session with extensions, skills, and prompt templates disabled. fx generation uses `fx ask --no-save --json`; only `final_output` is used, not accumulated output. Instructions alone cannot enforce fx tool permissions. Local fx settings, hooks, and plugins may have side effects.
 
 Use the `prop-review-ingest` skill to bring completed reviews into chat and answer comments. The `prop-review` skill handles generation and review handoff. Approval applies only to that item; implementation does not start automatically.
