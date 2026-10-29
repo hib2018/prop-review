@@ -38,7 +38,7 @@ func deletionReferences(root string) (map[string]bool, error) {
 		if !entry.IsDir() {
 			return nil, fmt.Errorf("unsafe review directory: %s", dir)
 		}
-		for _, name := range []string{"proposal.txt", "proposal.review.txt", "parent.txt", "request.txt", "followup.txt"} {
+		for _, name := range []string{"proposal.txt", "proposal.review.txt", "parent.txt", "request.txt", "followup.txt", "revision.txt"} {
 			path := filepath.Join(dir, name)
 			info, err := os.Lstat(path)
 			if errors.Is(err, os.ErrNotExist) {
@@ -107,7 +107,7 @@ func deletionContents(path string) (string, string, error) {
 		return "", "", err
 	}
 	for _, entry := range entries {
-		if entry.IsDir() || !slices.Contains([]string{"proposal.txt", "proposal.review.txt", "parent.txt", "request.txt", "followup.txt"}, entry.Name()) {
+		if entry.IsDir() || !slices.Contains([]string{"proposal.txt", "proposal.review.txt", "parent.txt", "request.txt", "followup.txt", "revision.txt"}, entry.Name()) {
 			return "", "", fmt.Errorf("unexpected file in review directory: %s", filepath.Join(dir, entry.Name()))
 		}
 	}
@@ -134,6 +134,20 @@ func deletionContents(path string) (string, string, error) {
 	}
 	if err == nil {
 		proposal = append(proposal, []byte("Linked followup: yes\n")...)
+	}
+	restructure, markerErr := reconstructionMarker(path)
+	if markerErr != nil {
+		return "", "", markerErr
+	}
+	if restructure {
+		parent, parentErr := parentName(path)
+		if parentErr != nil {
+			return "", "", parentErr
+		}
+		if parent == "" || err == nil {
+			return "", "", errors.New("invalid restructure marker combination")
+		}
+		proposal = append(proposal, []byte("Whole-proposal reconstruction: yes\n")...)
 	}
 	result, err := os.ReadFile(filepath.Join(dir, "proposal.review.txt"))
 	if errors.Is(err, os.ErrNotExist) {
@@ -189,7 +203,7 @@ func deleteProposal(root string, in io.Reader, out io.Writer) error {
 		return errors.New("proposal or review changed during confirmation")
 	}
 	dir := filepath.Dir(path)
-	for _, name := range []string{"proposal.review.txt", "parent.txt", "followup.txt", "request.txt", "proposal.txt"} {
+	for _, name := range []string{"proposal.review.txt", "parent.txt", "followup.txt", "revision.txt", "request.txt", "proposal.txt"} {
 		err := os.Remove(filepath.Join(dir, name))
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err

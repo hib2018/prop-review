@@ -249,7 +249,7 @@ func generate(revise bool, engine, specified string) error {
 		return err
 	}
 	var prompt string
-	var commented, original []item
+	var original []item
 	var parent, request string
 	if revise {
 		var path string
@@ -260,7 +260,7 @@ func generate(revise bool, engine, specified string) error {
 			paths, err = revisableProposals(root)
 			if err == nil {
 				if len(paths) == 0 {
-					fmt.Fprintln(os.Stderr, "Recommended: if pending items remain, review them again; `revise` only changes commented items.")
+					fmt.Fprintln(os.Stderr, "Recommended: if pending items remain, review them again; `revise` requires review comments to reconstruct the proposal.")
 					return errors.New("no reviewed proposal awaiting revision in prop-review-tmp")
 				}
 				path, err = chooseProposal(paths)
@@ -281,24 +281,14 @@ func generate(revise bool, engine, specified string) error {
 			}
 		}
 		parent = path
-		for _, it := range original {
-			if it.comment {
-				commented = append(commented, it)
-			}
-		}
-		revisePendingAdvice(hasPending, len(commented) > 0, os.Stderr)
-		if len(commented) == 0 {
+		revisePendingAdvice(hasPending, countComments(original) > 0, os.Stderr)
+		if countComments(original) == 0 {
 			return errors.New("no commented proposals to revise")
 		}
-		feedback := make([]struct {
-			Topic   string `json:"topic"`
-			Comment string `json:"comment"`
-		}, len(commented))
-		for i, it := range commented {
-			feedback[i].Topic, feedback[i].Comment = it.topic, it.answer
+		prompt, err = reconstructionPrompt(root, path)
+		if err != nil {
+			return err
 		}
-		data, _ := json.Marshal(feedback)
-		prompt = fmt.Sprintf(revisePrompt, path, data, len(commented))
 	} else {
 		var line string
 		err := withRawTTY(func(tty *os.File) error {
@@ -325,21 +315,12 @@ func generate(revise bool, engine, specified string) error {
 		return err
 	}
 	if revise {
-		if len(items) != len(commented) {
-			return fmt.Errorf("%s revision count does not match comments", engine)
+		path, err := saveProposalWithMode(root, items, parent, "", false, true)
+		if err != nil {
+			return err
 		}
-		// Preserve original ordering of pending and revised topics; approved items stay in history.
-		var merged []item
-		index := 0
-		for _, it := range original {
-			if it.comment {
-				merged = append(merged, items[index])
-				index++
-			} else if it.answer == "" {
-				merged = append(merged, item{topic: it.topic})
-			}
-		}
-		items = merged
+		fmt.Println(displayPath(root, path))
+		return nil
 	}
 	return saveAndReview(root, items, parent, request, !revise)
 }
@@ -349,7 +330,7 @@ func revisePendingAdvice(pending, commented bool, out io.Writer) {
 		return
 	}
 	if !commented {
-		fmt.Fprintln(out, "Recommended: review pending items again; `revise` only changes commented items.")
+		fmt.Fprintln(out, "Recommended: review pending items again; `revise` requires review comments to reconstruct the proposal.")
 		return
 	}
 	fmt.Fprintln(out, "Recommended: review pending items again in the revised proposal (`prop-review <proposal.txt>`).")

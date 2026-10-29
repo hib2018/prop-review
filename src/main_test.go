@@ -96,14 +96,14 @@ func TestFXAndRevision(t *testing.T) {
 		t.Fatalf("revision parent: %q, %v", link, err)
 	}
 	data, err := os.ReadFile(newPath)
-	if err != nil || string(data) != "改訂案\nApproval/Comment:\n\n保留案\nApproval/Comment:\n\n" {
+	if err != nil || string(data) != "改訂案\nApproval/Comment:\n\n" {
 		t.Fatalf("revision: %q, %v", data, err)
 	}
 	if _, err := os.Stat(resultPath); err != nil {
 		t.Fatalf("original result lost: %v", err)
 	}
 	// Another revision links to its immediate predecessor, preserving the full chain.
-	if err := os.WriteFile(filepath.Join(filepath.Dir(newPath), "proposal.review.txt"), []byte(render([]item{{topic: "改訂案", answer: "again", comment: true}, {topic: "保留案"}})), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(filepath.Dir(newPath), "proposal.review.txt"), []byte(render([]item{{topic: "改訂案", answer: "again", comment: true}})), 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("FX_OUTPUT", `["再改訂案"]`)
@@ -204,7 +204,7 @@ func TestRevisionSelectionAndExplicitPaths(t *testing.T) {
 		t.Fatalf("wrong parent: %q, %v", link, err)
 	}
 	data, err := os.ReadFile(newPath)
-	if err != nil || string(data) != "Revised\nApproval/Comment:\n\nPending\nApproval/Comment:\n\n" {
+	if err != nil || string(data) != "Revised\nApproval/Comment:\n\n" {
 		t.Fatalf("wrong revision: %q, %v", data, err)
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(newPath), "proposal.review.txt")); !errors.Is(err, os.ErrNotExist) {

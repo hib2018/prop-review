@@ -14,9 +14,10 @@ import (
 )
 
 type reviewStep struct {
-	path     string
-	items    []item
-	followup bool
+	path        string
+	items       []item
+	followup    bool
+	restructure bool
 }
 
 func localFile(path string) ([]byte, error) {
@@ -157,10 +158,18 @@ func reviewHistory(root, selected string, requireRequest bool) ([]reviewStep, st
 			return nil, "", fmt.Errorf("invalid followup.txt beside %s", path)
 		}
 		step := reviewStep{path: path, items: items, followup: err == nil}
+		restructure, err := reconstructionMarker(path)
+		if err != nil {
+			return nil, "", err
+		}
+		step.restructure = restructure
+		if restructure && (step.followup || len(history) == 0) {
+			return nil, "", errors.New("restructure requires a parent and cannot be a followup")
+		}
 		if len(history) == 0 && step.followup {
 			return nil, "", errors.New("root cannot be a followup")
 		}
-		if len(history) > 0 && !step.followup {
+		if len(history) > 0 && !step.followup && !step.restructure {
 			prior := history[len(history)-1].items
 			var pending []string
 			for _, it := range prior {
@@ -173,7 +182,7 @@ func reviewHistory(root, selected string, requireRequest bool) ([]reviewStep, st
 			}
 			j := 0
 			for _, it := range prior {
-				if it.answer == "Approved" {
+				if !it.comment && it.answer == "Approved" {
 					continue
 				}
 				if it.answer == "" && items[j].topic != it.topic {
@@ -237,7 +246,8 @@ func clarificationQuestionsFromHistory(root string, history []reviewStep, reques
 			Status  string `json:"status"`
 			Comment string `json:"comment,omitempty"`
 		} `json:"items"`
-		Followup bool `json:"followup"`
+		Followup    bool `json:"followup"`
+		Restructure bool `json:"restructure,omitempty"`
 	}
 	context := make([]reviewContext, len(history))
 	var approved []string
@@ -247,11 +257,15 @@ func clarificationQuestionsFromHistory(root string, history []reviewStep, reques
 	for i, step := range history {
 		if i > 0 && !step.followup {
 			for _, prior := range history[i-1].items {
-				if prior.comment {
+				if prior.comment || step.restructure {
 					delete(open, prior.topic) // A revision replaces its parent's commented topics.
 				}
 			}
 		}
+		if step.restructure {
+			clear(open) // Whole-proposal reconstruction supersedes all earlier unresolved topics.
+		}
+		context[i].Restructure = step.restructure
 		context[i].Proposal = filepath.Base(filepath.Dir(step.path))
 		context[i].Followup = step.followup
 		for _, it := range step.items {
@@ -261,7 +275,7 @@ func clarificationQuestionsFromHistory(root string, history []reviewStep, reques
 				Comment string `json:"comment,omitempty"`
 			}{Topic: it.topic}
 			switch {
-			case it.answer == "Approved":
+			case !it.comment && it.answer == "Approved":
 				entry.Status = "approved"
 				if !accepted[it.topic] {
 					approved = append(approved, it.topic)
@@ -273,7 +287,7 @@ func clarificationQuestionsFromHistory(root string, history []reviewStep, reques
 			default:
 				entry.Status = "pending"
 			}
-			if it.answer != "Approved" && !accepted[it.topic] {
+			if it.comment || it.answer != "Approved" {
 				if !open[it.topic] {
 					unresolved = append(unresolved, it.topic)
 				}
@@ -336,6 +350,9 @@ func clarificationAdvice(history []reviewStep, out io.Writer) {
 	}
 	pending := make(map[string]bool)
 	for _, step := range history {
+		if step.restructure {
+			clear(pending)
+		}
 		for _, it := range step.items {
 			pending[it.topic] = it.answer == ""
 		}

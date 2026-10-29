@@ -66,7 +66,7 @@ func TestReviewRecommendations(t *testing.T) {
 	}
 	out.Reset()
 	revisePendingAdvice(true, false, &out)
-	if !strings.Contains(out.String(), "only changes commented items") {
+	if !strings.Contains(out.String(), "requires review comments") {
 		t.Fatalf("pending-only revise advice: %q", out.String())
 	}
 	out.Reset()

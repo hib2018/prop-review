@@ -52,12 +52,12 @@ func TestDuplicateTopicsRejectedAtEveryEntry(t *testing.T) {
 	}
 }
 
-func TestRevisionRejectsDuplicateAfterMergingPendingItems(t *testing.T) {
+func TestRevisionRejectsDuplicateGeneratedItems(t *testing.T) {
 	root, original, _ := clarificationFixture(t)
 	inFixtureRepo(t, root)
-	t.Setenv("CLARIFY_OUTPUT", `["未確認"]`)
+	t.Setenv("CLARIFY_OUTPUT", `["未確認","未確認"]`)
 	if err := generate(true, "fx", original); err == nil || !strings.Contains(err.Error(), "duplicate proposal topic") {
-		t.Fatalf("accepted revision colliding with pending item: %v", err)
+		t.Fatalf("accepted duplicate generated items: %v", err)
 	}
 	paths, err := proposalPaths(root)
 	if err != nil || len(paths) != 1 {

@@ -98,7 +98,7 @@ func saveSpecWithConfirmation(engine string, in io.Reader, out io.Writer) error 
 		for _, step := range history {
 			covered[step.path] = true
 			for _, it := range step.items {
-				if it.answer == "Approved" && !seen[it.topic] {
+				if !it.comment && it.answer == "Approved" && !seen[it.topic] {
 					approved = append(approved, it.topic)
 					seen[it.topic] = true
 				}
