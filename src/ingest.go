@@ -14,24 +14,9 @@ import (
 
 // The skill owns review selection, validation, and the reply; the CLI only starts the conversation.
 func ingest(root, engine string) error {
-	home, err := os.UserHomeDir()
+	skill, err := findIngestSkill(root, engine)
 	if err != nil {
 		return err
-	}
-	var skill string
-	for _, path := range []string{
-		filepath.Join(home, ".agents", "skills", "prop-review-ingest", "SKILL.md"),
-		filepath.Join(home, ".pi", "agent", "skills", "prop-review-ingest", "SKILL.md"),
-	} {
-		if info, statErr := os.Stat(path); statErr == nil && !info.IsDir() {
-			skill = path
-			break
-		} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
-			return statErr
-		}
-	}
-	if skill == "" {
-		return errors.New("prop-review-ingest skill not found; install it in ~/.agents/skills or ~/.pi/agent/skills")
 	}
 	prompt := fmt.Sprintf("Invoke prop-review-ingest now. Read and follow the skill at %s to report the latest completed review in this repository and respond to the human's feedback in chat. Write both the outcome summary and your response in the same language as the selected proposal text, not the CLI, these instructions, or the repository documentation. Preserve quoted proposal and comment text as written. If no result is found, ask the human for its path. Do not modify review files, revise proposals, or implement anything.", skill)
 	launch := func(args ...string) error {
@@ -56,6 +41,35 @@ func ingest(root, engine string) error {
 	default:
 		return fmt.Errorf("unknown engine: %s", engine)
 	}
+}
+
+func findIngestSkill(root, engine string) (string, error) {
+	local := []string{".agents/skills", ".pi/skills"}
+	if engine == "pi" {
+		local[0], local[1] = local[1], local[0]
+	}
+	var paths []string
+	for _, base := range local {
+		paths = append(paths, filepath.Join(root, base, "prop-review-ingest", "SKILL.md"))
+	}
+	// Preserve the existing user-wide fallback order.
+	home, err := os.UserHomeDir()
+	if err == nil {
+		paths = append(paths,
+			filepath.Join(home, ".agents", "skills", "prop-review-ingest", "SKILL.md"),
+			filepath.Join(home, ".pi", "agent", "skills", "prop-review-ingest", "SKILL.md"))
+	}
+	for _, path := range paths {
+		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() {
+			return path, nil
+		} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+			return "", statErr
+		}
+	}
+	if err != nil {
+		return "", err
+	}
+	return "", errors.New("prop-review-ingest skill not found; run prop-review init or install it in ~/.agents/skills or ~/.pi/agent/skills")
 }
 
 func fxIngestSession(root, prompt string) (string, error) {

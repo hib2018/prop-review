@@ -16,6 +16,16 @@ import (
 )
 
 func run(args []string) error {
+	if len(args) > 0 && args[0] == "init" {
+		if len(args) != 1 {
+			return errors.New("usage: prop-review init")
+		}
+		root, err := repoRoot()
+		if err != nil {
+			return err
+		}
+		return initRepository(root)
+	}
 	if len(args) > 0 && args[0] == "ingest" {
 		if len(args) > 2 {
 			return errors.New("usage: prop-review ingest [pi|fx]")
@@ -103,7 +113,7 @@ func run(args []string) error {
 		return generate(args[0] == "revise", engine, "")
 	}
 	if len(args) > 2 {
-		return errors.New("usage: prop-review [ingest [pi|fx]|delete|engine|--engine pi|fx|generate|clarify|spec|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
+		return errors.New("usage: prop-review [init|ingest [pi|fx]|delete|engine|--engine pi|fx|generate|clarify|spec|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
 	}
 	if len(args) == 0 {
 		root, err := repoRoot()
