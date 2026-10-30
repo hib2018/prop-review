@@ -69,7 +69,7 @@ func reviewWithExplanation(items []item, in io.Reader, out io.Writer, comment fu
 				// Quote engine diagnostics so control sequences cannot affect the terminal.
 				fmt.Fprintf(out, "Explanation failed: %q\n", err.Error())
 			} else {
-				fmt.Fprintf(out, "\nAnswer:\n%s\n", answer)
+				fmt.Fprintf(out, "\n────────────────────────────────────────\nAnswer:\n%s\n────────────────────────────────────────\n", answer)
 			}
 			showPrompt = true
 		case "c":

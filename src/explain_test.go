@@ -37,7 +37,7 @@ func TestReviewExplanationPreservesDecisions(t *testing.T) {
 	if items[0].answer != "Approved" || items[0].comment || items[1].answer != "修正希望" || !items[1].comment {
 		t.Fatal(items)
 	}
-	for _, text := range []string{"Answer:\n詳しい説明\n具体例", "Explanation failed:", "offline", "e Explain/Ask"} {
+	for _, text := range []string{"\n────────────────────────────────────────\nAnswer:\n詳しい説明\n具体例\n────────────────────────────────────────\n\n[1/2] 案1", "Explanation failed:", "offline", "e Explain/Ask"} {
 		if !strings.Contains(out.String(), text) {
 			t.Fatalf("missing %q: %s", text, out.String())
 		}
