@@ -16,11 +16,15 @@ import (
 )
 
 func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reader) (string, error)) error {
+	return reviewWithExplanation(items, in, out, comment, nil)
+}
+
+func reviewWithExplanation(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reader) (string, error), explain func(int, string) (string, error)) error {
 	r := bufio.NewReader(in)
 	showPrompt := true
 	for i := 0; i < len(items); {
 		if showPrompt {
-			fmt.Fprintf(out, "\n[%d/%d] %s\na Approve   c Comment   Enter Skip   b Back   q Quit (press Enter to confirm)\n", i+1, len(items), items[i].topic)
+			fmt.Fprintf(out, "\n[%d/%d] %s\na Approve   c Comment   e Explain/Ask   Enter Skip   b Back   q Quit (press Enter to confirm)\n", i+1, len(items), items[i].topic)
 			showPrompt = false
 		}
 		key, err := inputLine(r, out, "> ", 64)
@@ -46,6 +50,27 @@ func review(items []item, in io.Reader, out io.Writer, comment func(*bufio.Reade
 			items[i].answer = "Approved"
 			items[i].comment = false
 			i++
+			showPrompt = true
+		case "e":
+			if explain == nil {
+				fmt.Fprintln(out, "Explanation unavailable.")
+				continue
+			}
+			question, err := inputLine(r, out, "\nQuestion (Enter for a detailed explanation): ", maxCommentBytes)
+			if errors.Is(err, errBadEncoding) || errors.Is(err, errInputTooLong) {
+				fmt.Fprintf(out, "%v; please try again.\n", err)
+				continue
+			}
+			if err != nil {
+				return fmt.Errorf("review interrupted: %w", err)
+			}
+			answer, err := explain(i, strings.TrimSpace(question))
+			if err != nil {
+				// Quote engine diagnostics so control sequences cannot affect the terminal.
+				fmt.Fprintf(out, "Explanation failed: %q\n", err.Error())
+			} else {
+				fmt.Fprintf(out, "\nAnswer:\n%s\n", answer)
+			}
 			showPrompt = true
 		case "c":
 			answer, err := comment(r)

@@ -161,7 +161,18 @@ func run(args []string) error {
 				}
 			})
 		}
-		if err := review(items, tty, tty, comment); err != nil {
+		explain := func(index int, question string) (string, error) {
+			engine, err := selectedEngine()
+			if err != nil {
+				return "", err
+			}
+			root, err := repoRoot()
+			if err != nil {
+				return "", err
+			}
+			return explainProposal(root, items, index, question, engine, tty)
+		}
+		if err := reviewWithExplanation(items, tty, tty, comment, explain); err != nil {
 			return err
 		}
 		f, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)

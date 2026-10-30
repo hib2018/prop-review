@@ -886,7 +886,7 @@ func TestReviewMenuEnglish(t *testing.T) {
 	if err := review([]item{{topic: "提案"}}, strings.NewReader("a\n"), &menu, nil); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(menu.String(), "a Approve   c Comment   Enter Skip   b Back   q Quit") {
+	if !strings.Contains(menu.String(), "a Approve   c Comment   e Explain/Ask   Enter Skip   b Back   q Quit") {
 		t.Fatalf("menu: %q", menu.String())
 	}
 }
