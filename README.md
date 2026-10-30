@@ -9,33 +9,25 @@ A local CLI for reviewing proposals item by item. Source code lives in `src/`. C
 Run from this repository's root and add `~/.local/bin` to your `PATH`.
 
 ```sh
-mkdir -p "$HOME/.local/bin" "$HOME/.pi/agent/skills"
+mkdir -p "$HOME/.local/bin"
 go build -o "$HOME/.local/bin/prop-review" ./src
 # Short alias (do not overwrite an existing prev command)
 if ! command -v prev >/dev/null 2>&1 && [ ! -e "$HOME/.local/bin/prev" ] && [ ! -L "$HOME/.local/bin/prev" ]; then
   ln -s prop-review "$HOME/.local/bin/prev"
 fi
-for skill in prop-review prop-review-ingest; do
-  if [ ! -e "$HOME/.pi/agent/skills/$skill" ] && [ ! -L "$HOME/.pi/agent/skills/$skill" ]; then
-    ln -s "$PWD/skills/$skill" "$HOME/.pi/agent/skills/$skill"
-  fi
-done
 ```
 
-For repository-local setup, run `prop-review init` in the target Git repository (see below). The home-level skill links above and below are optional fallbacks, not required by `init`.
+Installation only places the binary and the short-command link; it does not install skills in your home directory. Re-run the `go build` command above after updating the CLI or bundled skill sources.
 
-For fx using the shared `~/.agents/skills` directory, you can also link the skills there:
+### Initialize a target repository
+
+Run inside the Git repository where you want to use prop-review:
 
 ```sh
-mkdir -p "$HOME/.agents/skills"
-for skill in prop-review prop-review-ingest; do
-  if [ ! -e "$HOME/.agents/skills/$skill" ] && [ ! -L "$HOME/.agents/skills/$skill" ]; then
-    ln -s "$PWD/skills/$skill" "$HOME/.agents/skills/$skill"
-  fi
-done
+prev init
 ```
 
-Existing links are not overwritten. Run `/reload` if Pi is already open. Re-run `go build` after updating the CLI source.
+This installs both skills into the repository's `.pi/skills/` and `.agents/skills/` directories and creates the `prop-review-tmp/` working directory. No home-level skill installation is needed. Existing home-level skills remain available as backward-compatible lookup fallbacks; these steps neither change nor remove them. See `init` below for conflict handling and how to refresh skill discovery in an active agent.
 
 ## Commands
 

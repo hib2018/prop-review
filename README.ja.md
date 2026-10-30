@@ -9,33 +9,25 @@
 このリポジトリのルートで実行し、`~/.local/bin` を `PATH` に追加してください。
 
 ```sh
-mkdir -p "$HOME/.local/bin" "$HOME/.pi/agent/skills"
+mkdir -p "$HOME/.local/bin"
 go build -o "$HOME/.local/bin/prop-review" ./src
 # 短縮コマンド（既存の prev は上書きしない）
 if ! command -v prev >/dev/null 2>&1 && [ ! -e "$HOME/.local/bin/prev" ] && [ ! -L "$HOME/.local/bin/prev" ]; then
   ln -s prop-review "$HOME/.local/bin/prev"
 fi
-for skill in prop-review prop-review-ingest; do
-  if [ ! -e "$HOME/.pi/agent/skills/$skill" ] && [ ! -L "$HOME/.pi/agent/skills/$skill" ]; then
-    ln -s "$PWD/skills/$skill" "$HOME/.pi/agent/skills/$skill"
-  fi
-done
 ```
 
-リポジトリ内だけでセットアップする場合は、対象のGitリポジトリで `prop-review init` を実行します（後述）。上記・下記のホームディレクトリへのスキルリンクは任意のフォールバックで、`init` には不要です。
+インストールではバイナリと短縮コマンドのリンクだけを配置し、ホームディレクトリにスキルは配置しません。CLIや同梱スキルのソースを更新した場合は、上記の `go build` を再実行してください。
 
-fxで共有の `~/.agents/skills` を使う場合は、そこにもリンクできます。
+### 利用するリポジトリの初期化
+
+対象のGitリポジトリ内で実行します。
 
 ```sh
-mkdir -p "$HOME/.agents/skills"
-for skill in prop-review prop-review-ingest; do
-  if [ ! -e "$HOME/.agents/skills/$skill" ] && [ ! -L "$HOME/.agents/skills/$skill" ]; then
-    ln -s "$PWD/skills/$skill" "$HOME/.agents/skills/$skill"
-  fi
-done
+prev init
 ```
 
-既存のリンクは上書きしません。Piを起動済みなら `/reload` します。CLIをソースから更新した場合は `go build` を再実行してください。
+両スキルをリポジトリ内の `.pi/skills/` と `.agents/skills/` に配置し、作業用の `prop-review-tmp/` を作成します。ホーム側へのスキル配置は不要です。既存のホーム側スキルは後方互換の探索先として引き続き利用できますが、この手順では変更・削除しません。競合時の動作や起動済みエージェントの再読み込み手順は、後述の `init` を参照してください。
 
 ## コマンド
 
