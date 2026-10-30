@@ -69,7 +69,8 @@ func reviewWithExplanation(items []item, in io.Reader, out io.Writer, comment fu
 				// Quote engine diagnostics so control sequences cannot affect the terminal.
 				fmt.Fprintf(out, "Explanation failed: %q\n", err.Error())
 			} else {
-				fmt.Fprintf(out, "\n────────────────────────────────────────\nAnswer:\n%s\n────────────────────────────────────────\n", answer)
+				line := strings.Repeat("─", terminalColumns(out, 40))
+				fmt.Fprintf(out, "\n%s\nAnswer:\n%s\n%s\n", line, answer, line)
 			}
 			showPrompt = true
 		case "c":
@@ -155,8 +156,9 @@ func drawRunes(out io.Writer, text []rune, width int, col int) {
 	}
 }
 
-func inputLine(r *bufio.Reader, out io.Writer, prompt string, maxBytes int) (string, error) {
-	width := 1 << 30 // Non-terminal writers do not have a screen edge.
+// terminalColumns reads the current width on each call, including after a resize.
+func terminalColumns(out io.Writer, fallback int) int {
+	width := fallback
 	if tty, ok := out.(*os.File); ok {
 		if size, err := stty(tty, "size"); err == nil {
 			var rows, columns int
@@ -168,7 +170,12 @@ func inputLine(r *bufio.Reader, out io.Writer, prompt string, maxBytes int) (str
 	if screen, ok := out.(interface{ terminalWidth() int }); ok && screen.terminalWidth() > 0 {
 		width = screen.terminalWidth()
 	}
-	width = max(width, 2) // Wide characters cannot fit in a one-column terminal.
+	return width
+}
+
+func inputLine(r *bufio.Reader, out io.Writer, prompt string, maxBytes int) (string, error) {
+	// Non-terminal writers do not have a screen edge.
+	width := max(terminalColumns(out, 1<<30), 2) // Wide characters need at least two columns.
 	prefix := []rune(prompt[strings.LastIndex(prompt, "\n")+1:])
 	fmt.Fprint(out, prompt[:strings.LastIndex(prompt, "\n")+1])
 	drawRunes(out, prefix, width, 0)

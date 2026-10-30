@@ -47,6 +47,25 @@ func TestReviewExplanationPreservesDecisions(t *testing.T) {
 	}
 }
 
+func TestReviewExplanationFullWidthSeparators(t *testing.T) {
+	for _, width := range []int{1, 20, 80, 120} {
+		out := &narrowScreen{width: 60}
+		explain := func(int, string) (string, error) {
+			// The terminal may have been resized while waiting for the engine.
+			out.width = width
+			return "Explanation", nil
+		}
+		if err := reviewWithExplanation([]item{{topic: "Proposal"}}, strings.NewReader("e\n\na\n"), out, nil, explain); err != nil {
+			t.Fatal(err)
+		}
+		line := strings.Repeat("─", width)
+		want := "\n" + line + "\nAnswer:\nExplanation\n" + line + "\n\n[1/1] Proposal"
+		if !strings.Contains(out.String(), want) || strings.Count(out.String(), line+"\n") != 2 {
+			t.Fatalf("width %d: missing full-width separators: %q", width, out.String())
+		}
+	}
+}
+
 func TestReviewExplanationInterrupted(t *testing.T) {
 	called := false
 	err := reviewWithExplanation([]item{{topic: "案"}}, strings.NewReader("e\n"), io.Discard, nil, func(int, string) (string, error) { called = true; return "", nil })
