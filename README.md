@@ -22,7 +22,9 @@ for skill in prop-review prop-review-ingest; do
 done
 ```
 
-For fx using the shared `~/.agents/skills` directory, link the skills there too:
+For repository-local setup, run `prop-review init` in the target Git repository (see below). The home-level skill links above and below are optional fallbacks, not required by `init`.
+
+For fx using the shared `~/.agents/skills` directory, you can also link the skills there:
 
 ```sh
 mkdir -p "$HOME/.agents/skills"
@@ -38,6 +40,24 @@ Existing links are not overwritten. Run `/reload` if Pi is already open. Re-run 
 ## Commands
 
 Run inside a Git repository. Displayed paths are abbreviated within the repository: the common `prop-review-tmp/` prefix is omitted, so a proposal appears as `review.xxx/proposal.txt`. The actual file remains under `prop-review-tmp/`; include that prefix when passing a path back to the CLI. `prev` is a shorter name accepting the same commands and arguments as `prop-review` (for example, `prev spec`). `generate`, `issue`, `revise`, `clarify`, `spec`, and `ingest` use its `prop-review-tmp/` directory.
+
+### `prop-review init` / `prev init`
+
+```sh
+prop-review init
+# Equivalent short command:
+prev init
+```
+
+Run at the Git repository root or in any subdirectory; setup always targets the repository root. Running outside a Git repository returns an error.
+
+- Creates `prop-review-tmp/`, preserving existing proposals and review results without starting generation or review, and adds `/prop-review-tmp/` to the repository's local Git `info/exclude` only if needed. It does not edit `.gitignore` or global Git ignore settings.
+- Copies both `prop-review` and `prop-review-ingest` skills into both `.pi/skills/` and `.agents/skills/` at the repository root, each with its own `SKILL.md`. These skill directories are not automatically ignored; decide whether to track them yourself.
+- Uses copies embedded in the CLI binary, with no network access or download. Rebuild the binary to include updated bundled skills.
+- Is idempotent when existing files have identical content. Differing files and symlinks are conflicts and are never overwritten; resolve conflicts yourself before retrying.
+- Does not change global agent settings, home-level skills, or the per-user engine setting.
+
+After initialization, refresh skill discovery in any active agent using that agent's supported behavior: Pi supports `/reload`; for other agents, use a supported reload mechanism or restart the agent in this repository. Do not assume Pi's command works in fx or other agents.
 
 ### `prop-review` / `prop-review proposal.txt [result.txt]`
 
@@ -60,7 +80,7 @@ prop-review ingest          # Start the configured engine (pi by default)
 prop-review ingest fx       # Override for this launch; pi or fx only
 ```
 
-Start an interactive agent in this Git repository and ask it to follow `prop-review-ingest`: select the latest completed review by `proposal.txt` modification time, validate its history, report the result, and answer comments in chat. If no completed review exists, the agent asks for a result path. Neither the CLI nor the skill edits review files or starts implementation. Install and authenticate the agent CLI first. The skill must be available at `~/.agents/skills/prop-review-ingest/SKILL.md` or `~/.pi/agent/skills/prop-review-ingest/SKILL.md` (the Pi setup above installs the latter); fx is given its path explicitly. `fx` has no interactive initial-prompt option: it runs `fx ask --json --prompt-permissions` to save a new first turn, then `fx --resume <id>` using that response's `session_id` to enter only the created session. Missing IDs, invalid responses, and first-turn failures stop without resuming or falling back to the latest session. Both the outcome summary and replies to comments are instructed to use the selected proposal's language. Agent-specific settings and tool permissions still apply; `ingest` does not sandbox agents.
+Start an interactive agent in this Git repository and ask it to follow `prop-review-ingest`: select the latest completed review by `proposal.txt` modification time, validate its history, report the result, and answer comments in chat. If no completed review exists, the agent asks for a result path. Neither the CLI nor the skill edits review files or starts implementation. Install and authenticate the agent CLI first. Skill lookup prefers this repository's engine-specific `prop-review-ingest/SKILL.md`: `.pi/skills/` for Pi or `.agents/skills/` for fx, then the other repository-local directory. Only then does it use the existing home fallback, checking `~/.agents/skills/prop-review-ingest/SKILL.md` followed by `~/.pi/agent/skills/prop-review-ingest/SKILL.md`. Run `prop-review init` to install both local copies; fx is given the selected skill path explicitly. `fx` has no interactive initial-prompt option: it runs `fx ask --json --prompt-permissions` to save a new first turn, then `fx --resume <id>` using that response's `session_id` to enter only the created session. Missing IDs, invalid responses, and first-turn failures stop without resuming or falling back to the latest session. Both the outcome summary and replies to comments are instructed to use the selected proposal's language. Agent-specific settings and tool permissions still apply; `ingest` does not sandbox agents.
 
 ### `prop-review generate`
 
