@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -191,29 +190,8 @@ func saveProposalWithSnapshot(root string, items []item, parent, request string,
 	if err := os.MkdirAll(base, 0700); err != nil {
 		return "", err
 	}
-	// Keep ephemeral reviews out of Git without changing the project's tracked files.
-	ignored := exec.Command("git", "-C", root, "check-ignore", "-q", "prop-review-tmp/probe")
-	if err := ignored.Run(); err != nil {
-		excludePath, err := exec.Command("git", "-C", root, "rev-parse", "--git-path", "info/exclude").Output()
-		if err != nil {
-			return "", err
-		}
-		path := strings.TrimSpace(string(excludePath))
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(root, path)
-		}
-		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
-		if err != nil {
-			return "", err
-		}
-		_, err = io.WriteString(f, "\n/prop-review-tmp/\n")
-		closeErr := f.Close()
-		if err != nil {
-			return "", err
-		}
-		if closeErr != nil {
-			return "", closeErr
-		}
+	if err := ensureReviewExcluded(root); err != nil {
+		return "", err
 	}
 	dir, err := os.MkdirTemp(base, "review.")
 	if err != nil {
