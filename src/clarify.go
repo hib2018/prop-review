@@ -68,17 +68,11 @@ func clarificationRoots(root string) ([]string, error) {
 func selectClarificationRoot(paths []string, in io.Reader, out io.Writer) (string, error) {
 	root, _ := repoRoot()
 	for i, path := range paths {
-		request, err := localFile(filepath.Join(filepath.Dir(path), "request.txt"))
-		if errors.Is(err, os.ErrNotExist) {
-			request = []byte("invalid: missing request.txt")
-		} else if err != nil {
+		label, err := proposalDisplayName(path, "invalid: missing request.txt")
+		if err != nil {
 			return "", err
 		}
-		label := []rune(strings.SplitN(string(request), "\n", 2)[0])
-		if len(label) > 100 {
-			label = append(label[:100], '…')
-		}
-		fmt.Fprintf(out, "%d) %s  %q\n", i+1, displayPath(root, path), string(label))
+		fmt.Fprintf(out, "%d) %s  %q\n", i+1, displayPath(root, path), label)
 	}
 	reader := bufio.NewReader(in)
 	for {
@@ -201,12 +195,7 @@ func reviewHistory(root, selected string, requireRequest bool) ([]reviewStep, st
 		}
 		name = children[name][0]
 	}
-	issue, err := readIssueSnapshot(selected)
-	if err != nil {
-		return nil, "", err
-	}
-	history[0].issue = issue
-	request, err := localFile(filepath.Join(filepath.Dir(selected), "request.txt"))
+	request, issue, err := rootRequest(selected)
 	if errors.Is(err, os.ErrNotExist) && !requireRequest {
 		return history, "", nil
 	}
@@ -216,10 +205,8 @@ func reviewHistory(root, selected string, requireRequest bool) ([]reviewStep, st
 	if err != nil {
 		return nil, "", err
 	}
-	if len(request) == 0 || len(request) > maxRequestBytes {
-		return nil, "", errors.New("invalid root request/title")
-	}
-	return history, string(request), nil
+	history[0].issue = issue
+	return history, request, nil
 }
 
 func countComments(items []item) int {

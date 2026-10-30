@@ -220,7 +220,11 @@ func selectProposal(paths []string, in io.Reader, out io.Writer) (string, error)
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return "", err
 		}
-		fmt.Fprintf(out, "%d) [%s] %s  %s\n", i+1, status, displayPath(root, path), items[0].topic)
+		label, err := proposalDisplayName(path, items[0].topic)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(out, "%d) [%s] %s  %s\n", i+1, status, displayPath(root, path), label)
 	}
 	r := bufio.NewReader(in)
 	for {
