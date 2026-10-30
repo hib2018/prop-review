@@ -76,7 +76,9 @@ Enter a request to generate proposals and begin reviewing immediately. Requests 
 prop-review issue
 ```
 
-Select an open issue in a GitHub repository recognized by an authenticated `gh` CLI, generate proposals, and review them. The menu shows the first 30 issues by default (`gh issue list`). The engine receives the title, body, number, and URL; the title is stored in `request.txt`. Issue JSON larger than 256 KiB is rejected. The issue itself is not changed.
+Select an open issue in a GitHub repository recognized by an authenticated `gh` CLI, generate proposals, and review them. The menu shows the first 30 issues by default (`gh issue list`). The engine receives the title, body, number, and URL; this initial snapshot is saved in the root proposal's `issue.json`. `request.txt` still stores only the title, and issue/root selection labels do not show the body. A save failure removes the incomplete proposal directory and does not start review. Issue JSON larger than 256 KiB is rejected on both save and read; an empty body is valid. Malformed JSON and non-regular snapshot files are read errors. The issue itself is not changed.
+
+`revise` and `clarify` use the validated history's root `issue.json` as context for the original requirements and constraints. They neither copy it to child generations nor fetch GitHub again, so later remote edits do not replace the initial snapshot. The issue itself is not approval or permission to implement; it is interpreted alongside later approvals and comments. Manual and existing chains without a snapshot continue using only the request and review history, without guessing or fetching an issue.
 
 ### `prop-review revise [proposal.txt]`
 
