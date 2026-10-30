@@ -14,6 +14,7 @@ import (
 )
 
 type reviewStep struct {
+	issue       *githubIssue // Root snapshot, populated only after validating the linked history.
 	path        string
 	items       []item
 	followup    bool
@@ -200,6 +201,11 @@ func reviewHistory(root, selected string, requireRequest bool) ([]reviewStep, st
 		}
 		name = children[name][0]
 	}
+	issue, err := readIssueSnapshot(selected)
+	if err != nil {
+		return nil, "", err
+	}
+	history[0].issue = issue
 	request, err := localFile(filepath.Join(filepath.Dir(selected), "request.txt"))
 	if errors.Is(err, os.ErrNotExist) && !requireRequest {
 		return history, "", nil

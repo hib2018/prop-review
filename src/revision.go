@@ -75,6 +75,7 @@ type reviewContext struct {
 }
 
 type reviewGenerationInput struct {
+	Issue       *githubIssue    `json:"original_issue,omitempty"`
 	Request     string          `json:"request_or_issue_title"`
 	Approved    []string        `json:"approved"`
 	Reviews     []reviewContext `json:"reviews"`
@@ -83,6 +84,9 @@ type reviewGenerationInput struct {
 
 func reviewInput(history []reviewStep, request string) (reviewGenerationInput, []item) {
 	input := reviewGenerationInput{Request: request}
+	if len(history) > 0 {
+		input.Issue = history[0].issue
+	}
 	accepted := make(map[string]bool)
 	open := make(map[string]reviewTopic)
 	var order []string
