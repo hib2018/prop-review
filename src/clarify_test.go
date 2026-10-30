@@ -45,21 +45,6 @@ func writeReview(t *testing.T, path string, items []item) {
 
 func TestReviewRecommendations(t *testing.T) {
 	var out strings.Builder
-	clarificationAdvice([]reviewStep{{items: []item{{topic: "Needs revision", answer: "fix", comment: true}, {topic: "Still pending"}}}}, &out)
-	if !strings.Contains(out.String(), "prop-review revise") || !strings.Contains(out.String(), "review pending items again") {
-		t.Fatalf("clarify advice: %q", out.String())
-	}
-	out.Reset()
-	clarificationAdvice([]reviewStep{{items: []item{{topic: "Needs revision", answer: "fix", comment: true}}}, {items: []item{{topic: "Ready", answer: "Approved"}}}}, &out)
-	if strings.Contains(out.String(), "revise") {
-		t.Fatalf("superseded comments should not trigger advice: %q", out.String())
-	}
-	out.Reset()
-	clarificationAdvice([]reviewStep{{items: []item{{topic: "Still pending"}}}}, &out)
-	if strings.Contains(out.String(), "revise") || !strings.Contains(out.String(), "review pending items again") {
-		t.Fatalf("pending-only advice: %q", out.String())
-	}
-	out.Reset()
 	revisePendingAdvice(true, true, &out)
 	if !strings.Contains(out.String(), "revised proposal") {
 		t.Fatalf("revise advice: %q", out.String())

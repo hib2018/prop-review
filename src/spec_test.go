@@ -103,6 +103,45 @@ func TestSaveSpecAllowsClarificationAndLegacyRoot(t *testing.T) {
 	}
 }
 
+func TestSpecChecksCommentsWithoutReconstructingOrSavingProposal(t *testing.T) {
+	root, _, promptFile := clarificationFixture(t)
+	specFixtureEngine(t, promptFile, "Approved memo")
+	inFixtureRepo(t, root)
+	before, err := proposalPaths(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A reconstruction request must fail loudly rather than silently generating a prop.
+	fx := filepath.Join(filepath.Dir(promptFile), "fx")
+	script, err := os.ReadFile(fx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script = []byte(strings.Replace(string(script), "case \"$prompt\" in", "case \"$prompt\" in\n  *'Reconstruct the proposal'*) exit 19 ;;", 1))
+	if err := os.WriteFile(fx, script, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `[]`))
+	var screen strings.Builder
+	if err := saveSpecWithConfirmation("fx", strings.NewReader("y\n"), &screen); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(screen.String(), "Could not check additional questions") || !strings.Contains(screen.String(), "Additional questions for") {
+		t.Fatalf("spec must check unresolved items without reconstructing: %s", screen.String())
+	}
+	after, err := proposalPaths(root)
+	if err != nil || len(after) != len(before) {
+		t.Fatalf("spec generated a proposal: %v, %v", after, err)
+	}
+	for _, path := range after {
+		for _, name := range []string{"revision.txt", "followup.txt"} {
+			if _, err := os.Stat(filepath.Join(filepath.Dir(path), name)); !os.IsNotExist(err) {
+				t.Fatalf("spec wrote %s: %v", name, err)
+			}
+		}
+	}
+}
+
 func TestSaveSpecRejectsEmptySummary(t *testing.T) {
 	root, original, promptFile := clarificationFixture(t)
 	specFixtureEngine(t, promptFile, "")

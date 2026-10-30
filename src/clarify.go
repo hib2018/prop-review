@@ -239,70 +239,10 @@ func clarificationQuestionsFor(root, selected, engine, activity string, progress
 }
 
 func clarificationQuestionsFromHistory(root string, history []reviewStep, request, engine, activity string, progress io.Writer) ([]item, string, error) {
-	type reviewContext struct {
-		Proposal string `json:"proposal"`
-		Items    []struct {
-			Topic   string `json:"topic"`
-			Status  string `json:"status"`
-			Comment string `json:"comment,omitempty"`
-		} `json:"items"`
-		Followup    bool `json:"followup"`
-		Restructure bool `json:"restructure,omitempty"`
-	}
-	context := make([]reviewContext, len(history))
-	var approved []string
-	var unresolved []string
-	open := make(map[string]bool)
+	input, outstanding := reviewInput(history, request)
 	accepted := make(map[string]bool)
-	for i, step := range history {
-		if i > 0 && !step.followup {
-			for _, prior := range history[i-1].items {
-				if prior.comment || step.restructure {
-					delete(open, prior.topic) // A revision replaces its parent's commented topics.
-				}
-			}
-		}
-		if step.restructure {
-			clear(open) // Whole-proposal reconstruction supersedes all earlier unresolved topics.
-		}
-		context[i].Restructure = step.restructure
-		context[i].Proposal = filepath.Base(filepath.Dir(step.path))
-		context[i].Followup = step.followup
-		for _, it := range step.items {
-			entry := struct {
-				Topic   string `json:"topic"`
-				Status  string `json:"status"`
-				Comment string `json:"comment,omitempty"`
-			}{Topic: it.topic}
-			switch {
-			case !it.comment && it.answer == "Approved":
-				entry.Status = "approved"
-				if !accepted[it.topic] {
-					approved = append(approved, it.topic)
-				}
-				accepted[it.topic] = true
-				open[it.topic] = false
-			case it.comment:
-				entry.Status, entry.Comment = "commented", it.answer
-			default:
-				entry.Status = "pending"
-			}
-			if it.comment || it.answer != "Approved" {
-				if !open[it.topic] {
-					unresolved = append(unresolved, it.topic)
-				}
-				open[it.topic] = true
-			}
-			context[i].Items = append(context[i].Items, entry)
-		}
-	}
-	var outstanding []item
-	carried := make(map[string]bool)
-	for _, topic := range unresolved {
-		if open[topic] && !carried[topic] {
-			outstanding = append(outstanding, item{topic: topic})
-			carried[topic] = true
-		}
+	for _, topic := range input.Approved {
+		accepted[topic] = true
 	}
 	if len(outstanding) > 10 {
 		return nil, "", errors.New("clarification exceeds 10 questions")
@@ -310,11 +250,7 @@ func clarificationQuestionsFromHistory(root string, history []reviewStep, reques
 	if len(outstanding) == 10 {
 		return outstanding, history[len(history)-1].path, nil
 	}
-	data, err := json.Marshal(struct {
-		Request  string          `json:"request_or_issue_title"`
-		Approved []string        `json:"approved"`
-		Reviews  []reviewContext `json:"reviews"`
-	}{request, approved, context})
+	data, err := json.Marshal(input)
 	if err != nil {
 		return nil, "", err
 	}
@@ -340,31 +276,6 @@ func clarificationQuestionsFromHistory(root string, history []reviewStep, reques
 	return outstanding, history[len(history)-1].path, nil
 }
 
-func clarificationAdvice(history []reviewStep, out io.Writer) {
-	// Only the current leaf's comments are directly revisable.
-	for _, it := range history[len(history)-1].items {
-		if it.comment {
-			fmt.Fprintln(out, "Recommended: run `prop-review revise` to address commented items before clarifying.")
-			break
-		}
-	}
-	pending := make(map[string]bool)
-	for _, step := range history {
-		if step.restructure {
-			clear(pending)
-		}
-		for _, it := range step.items {
-			pending[it.topic] = it.answer == ""
-		}
-	}
-	for _, open := range pending {
-		if open {
-			fmt.Fprintln(out, "Recommended: review pending items again in the new proposal.")
-			break
-		}
-	}
-}
-
 func clarify(engine string) error {
 	root, err := repoRoot()
 	if err != nil {
@@ -386,16 +297,11 @@ func clarify(engine string) error {
 	if err != nil {
 		return err
 	}
-	history, _, err := clarificationHistory(root, selected)
+	history, request, err := clarificationHistory(root, selected)
 	if err != nil {
 		return err
 	}
-	clarificationAdvice(history, os.Stderr)
-	items, parent, err := clarificationQuestions(root, selected, engine)
-	if err != nil {
-		return err
-	}
-	path, err := saveClarification(root, items, parent)
+	path, err := saveClarificationFromHistory(root, history, request, engine, os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -412,4 +318,30 @@ func saveClarification(root string, items []item, parent string) (string, error)
 		return "", nil
 	}
 	return saveProposalWithMetadata(root, items, parent, "", true)
+}
+
+// Save only after successful generation and validation. The caller alone opens review.
+func saveClarificationFromHistory(root string, history []reviewStep, request, engine string, progress io.Writer) (string, error) {
+	if len(history) == 0 {
+		return "", errors.New("empty review history")
+	}
+	input, _ := reviewInput(history, request)
+	for _, it := range input.Outstanding {
+		if it.Status == "commented" {
+			prompt, err := reconstructionPromptFromHistory(history, request)
+			if err != nil {
+				return "", err
+			}
+			items, err := proposalsWithActivity(root, prompt, engine, 100*time.Second, progress, false, "Reconstructing proposals")
+			if err != nil {
+				return "", err
+			}
+			return saveProposalWithMode(root, items, history[len(history)-1].path, "", false, true)
+		}
+	}
+	items, parent, err := clarificationQuestionsFromHistory(root, history, request, engine, "Checking additional questions", progress)
+	if err != nil {
+		return "", err
+	}
+	return saveClarification(root, items, parent)
 }

@@ -47,30 +47,62 @@ func reconstructionPrompt(root, selected string) (string, error) {
 	if history[len(history)-1].path != selected {
 		return "", errors.New("revision must target the latest reviewed proposal in its chain")
 	}
-	type topic struct {
-		Topic   string `json:"topic"`
-		Comment string `json:"comment,omitempty"`
-		Status  string `json:"status"`
+	return reconstructionPromptFromHistory(history, request)
+}
+
+func reconstructionPromptFromHistory(history []reviewStep, request string) (string, error) {
+	input, _ := reviewInput(history, request)
+	data, err := json.Marshal(input)
+	if err != nil {
+		return "", err
 	}
-	type review struct {
-		Items       []topic `json:"items"`
-		Followup    bool    `json:"followup"`
-		Restructure bool    `json:"restructure"`
-	}
-	input := struct {
-		Request  string   `json:"request_or_issue_title"`
-		Approved []string `json:"approved"`
-		Reviews  []review `json:"reviews"`
-	}{Request: request}
+	return fmt.Sprintf(revisePrompt, data), nil
+}
+
+// The same chronological interpretation feeds revision, clarification and spec checks.
+// Historical approvals constrain generation; outstanding describes the current review state.
+type reviewTopic struct {
+	Topic   string `json:"topic"`
+	Comment string `json:"comment,omitempty"`
+	Status  string `json:"status"`
+}
+
+type reviewContext struct {
+	Proposal    string        `json:"proposal"`
+	Items       []reviewTopic `json:"items"`
+	Followup    bool          `json:"followup"`
+	Restructure bool          `json:"restructure"`
+}
+
+type reviewGenerationInput struct {
+	Request     string          `json:"request_or_issue_title"`
+	Approved    []string        `json:"approved"`
+	Reviews     []reviewContext `json:"reviews"`
+	Outstanding []reviewTopic   `json:"outstanding"`
+}
+
+func reviewInput(history []reviewStep, request string) (reviewGenerationInput, []item) {
+	input := reviewGenerationInput{Request: request}
 	accepted := make(map[string]bool)
-	for _, step := range history {
-		entry := review{Followup: step.followup, Restructure: step.restructure}
+	open := make(map[string]reviewTopic)
+	var order []string
+	for i, step := range history {
+		if step.restructure {
+			clear(open)
+			order = nil // Reused topics follow the reconstructed proposal's new order.
+		} else if i > 0 && !step.followup {
+			for _, prior := range history[i-1].items {
+				if prior.comment {
+					delete(open, prior.topic)
+				}
+			}
+		}
+		entry := reviewContext{Proposal: filepath.Base(filepath.Dir(step.path)), Followup: step.followup, Restructure: step.restructure}
 		for _, it := range step.items {
-			value := topic{Topic: it.topic, Status: "pending"}
+			value := reviewTopic{Topic: it.topic, Status: "pending"}
 			if it.comment {
 				value.Comment, value.Status = it.answer, "commented"
-			}
-			if !it.comment && it.answer == "Approved" {
+			} else if it.answer == "Approved" {
 				value.Status = "approved"
 				if !accepted[it.topic] {
 					input.Approved = append(input.Approved, it.topic)
@@ -78,12 +110,25 @@ func reconstructionPrompt(root, selected string) (string, error) {
 				accepted[it.topic] = true
 			}
 			entry.Items = append(entry.Items, value)
+			if value.Status == "approved" {
+				delete(open, it.topic)
+			} else {
+				if _, exists := open[it.topic]; !exists {
+					order = append(order, it.topic)
+				}
+				open[it.topic] = value
+			}
 		}
 		input.Reviews = append(input.Reviews, entry)
 	}
-	data, err := json.Marshal(input)
-	if err != nil {
-		return "", err
+	var outstanding []item
+	carried := make(map[string]bool)
+	for _, topic := range order {
+		if value, exists := open[topic]; exists && !carried[topic] {
+			input.Outstanding = append(input.Outstanding, value)
+			outstanding = append(outstanding, item{topic: topic})
+			carried[topic] = true
+		}
 	}
-	return fmt.Sprintf(revisePrompt, data), nil
+	return input, outstanding
 }
