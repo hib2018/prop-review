@@ -51,6 +51,8 @@ prop-review proposal.txt /path/to/result.txt
 
 Enter `a` then Enter to approve, `c` then Enter to comment, Enter alone to leave unconfirmed, `b` then Enter to go back, or `q` then Enter to quit without saving. Fullwidth Latin keys work too. An empty comment warns that the item remains unconfirmed (Enter to confirm, Esc to return). Request and comment entry support Left/Right, Home/End, and Backspace; comments are limited to 1 MiB. Results go beside the proposal as `proposal.review.txt` by default and their path is printed. Existing results are never overwritten. A custom result path works for review, but cannot be used in `revise` or `spec` history.
 
+To ask about the current item before approving or commenting, enter `e` then Enter, followed by your question. Leave the question empty for a detailed explanation. The configured Pi/fx engine reads the repository and current proposal list, displays its answer in the CLI, and returns to the same item. Questions and answers are not saved and do not count as approvals or comments. Each question is independent; earlier questions and answers are not carried forward. Engine failures leave review available. The engine must be installed and authenticated; requests time out after 100 seconds. File changes and implementation are prohibited by the prompt, but instructions alone do not enforce fx tool permissions.
+
 ### `prop-review ingest [NAME]`
 
 ```sh
