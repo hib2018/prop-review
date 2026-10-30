@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 // The skill owns review selection, validation, and the reply; the CLI only starts the conversation.
@@ -29,7 +33,7 @@ func ingest(root, engine string) error {
 	if skill == "" {
 		return errors.New("prop-review-ingest skill not found; install it in ~/.agents/skills or ~/.pi/agent/skills")
 	}
-	prompt := fmt.Sprintf("Invoke prop-review-ingest now. Read and follow the skill at %s to report the latest completed review in this repository and respond to the human's feedback in chat. If no result is found, ask the human for its path. Do not modify review files, revise proposals, or implement anything.", skill)
+	prompt := fmt.Sprintf("Invoke prop-review-ingest now. Read and follow the skill at %s to report the latest completed review in this repository and respond to the human's feedback in chat. Write both the outcome summary and your response in the same language as the selected proposal text, not the CLI, these instructions, or the repository documentation. Preserve quoted proposal and comment text as written. If no result is found, ask the human for its path. Do not modify review files, revise proposals, or implement anything.", skill)
 	launch := func(args ...string) error {
 		cmd := exec.Command(args[0], args[1:]...)
 		cmd.Dir = root
@@ -43,12 +47,49 @@ func ingest(root, engine string) error {
 	case "pi":
 		return launch("pi", "--skill", skill, prompt)
 	case "fx":
-		// fx has no interactive initial-prompt flag. Save the first turn, then resume it.
-		if err := launch("fx", "ask", "--prompt-permissions", "--", prompt); err != nil {
+		// Save a new first turn, then open exactly that session, never the latest one.
+		id, err := fxIngestSession(root, prompt)
+		if err != nil {
 			return err
 		}
-		return launch("fx", "--continue")
+		return launch("fx", "--resume", id)
 	default:
 		return fmt.Errorf("unknown engine: %s", engine)
 	}
+}
+
+func fxIngestSession(root, prompt string) (string, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "fx", "ask", "--json", "--prompt-permissions", "--", prompt)
+	cmd.Dir = root
+	cmd.Stdin, cmd.Stderr = os.Stdin, os.Stderr
+	cmd.WaitDelay = time.Second
+	output := &limitedCapture{limit: maxEngineOutputBytes, cancel: cancel}
+	cmd.Stdout = output
+	err := cmd.Run()
+	if output.exceeded.Load() {
+		return "", fmt.Errorf("fx ingest response exceeds %d bytes", maxEngineOutputBytes)
+	}
+	if err != nil {
+		return "", fmt.Errorf("fx failed: %w", err)
+	}
+	// Validate successful completion before opening any session.
+	if _, err := fxResponse(output.Bytes()); err != nil {
+		return "", err
+	}
+	var response struct {
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		return "", fmt.Errorf("invalid fx ingest response: %w", err)
+	}
+	id := response.SessionID
+	// Reject aliases and option-like values: resume must identify one exact session.
+	if id == "" || id == "last" || strings.HasPrefix(id, "-") || strings.IndexFunc(id, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_')
+	}) >= 0 {
+		return "", errors.New("fx ingest response has no valid exact session_id; refusing to resume another session")
+	}
+	return id, nil
 }
