@@ -230,7 +230,7 @@ func startSpinner(progress io.Writer, activity, engine string) func() {
 				frame = (frame + 1) % len(frames)
 				fmt.Fprintf(progress, "\r%c %s with %s...", frames[frame], activity, engine)
 			case <-done:
-				fmt.Fprintln(progress)
+				fmt.Fprint(progress, "\r\x1b[2K")
 				return
 			}
 		}

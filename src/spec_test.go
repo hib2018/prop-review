@@ -49,7 +49,7 @@ func TestSaveSpecAllReviewedChains(t *testing.T) {
 	if err := saveSpecWithConfirmation("fx", strings.NewReader("y\n"), &screen); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(screen.String(), "Checking spec clarifications with fx...\n") != 1 || strings.Contains(screen.String(), "Summarizing approved items") || !strings.Contains(screen.String(), "Generated memo for ") {
+	if strings.Count(screen.String(), "\r\x1b[2K") != 1 || strings.Contains(screen.String(), "Summarizing approved items") || !strings.Contains(screen.String(), "Generated memo for ") {
 		t.Fatalf("unexpected spec progress: %s", screen.String())
 	}
 	output := filepath.Join(root, "prop-review-tmp", "spec.md")
