@@ -22,3 +22,11 @@
 go test ./src -run TestExtractedPromptsPreserveOutput -count=1
 go test ./src
 ```
+
+Pi・fxの実エンジンによる再構成例は明示的に有効化して実行します（通常のテストではスキップ）。各エンジンのインストール・認証が必要で、モデルを呼び出します。
+
+```sh
+PROP_REVIEW_LIVE_ENGINES=pi,fx go test ./src -run '^TestClarifyLiveEngines$' -v -count=1
+```
+
+表示される生成結果について、JSON制約の維持、標準出力への変更、保存先設定の不要化、全項目の未承認を人間が確認してください。テストの成功は意味的な正しさの自動承認ではありません。
