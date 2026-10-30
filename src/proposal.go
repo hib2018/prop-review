@@ -177,6 +177,10 @@ func saveProposalWithMetadata(root string, items []item, parent, request string,
 }
 
 func saveProposalWithMode(root string, items []item, parent, request string, followup, restructure bool) (string, error) {
+	return saveProposalWithSnapshot(root, items, parent, request, followup, restructure, nil)
+}
+
+func saveProposalWithSnapshot(root string, items []item, parent, request string, followup, restructure bool, snapshot []byte) (string, error) {
 	if restructure && (parent == "" || followup) {
 		return "", errors.New("restructure needs a parent and cannot be a followup")
 	}
@@ -249,6 +253,12 @@ func saveProposalWithMode(root string, items []item, parent, request string, fol
 	}
 	if restructure {
 		if err := os.WriteFile(filepath.Join(dir, "revision.txt"), []byte("restructure\n"), 0600); err != nil {
+			os.RemoveAll(dir)
+			return "", err
+		}
+	}
+	if snapshot != nil {
+		if err := os.WriteFile(filepath.Join(dir, "issue.json"), snapshot, 0600); err != nil {
 			os.RemoveAll(dir)
 			return "", err
 		}

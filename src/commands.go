@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 )
 
@@ -425,23 +424,22 @@ func generateIssue(engine string) error {
 	}); err != nil {
 		return err
 	}
-	if strings.TrimSpace(issue.Title) == "" || !utf8.ValidString(issue.Title) || strings.ContainsRune(issue.Title, utf8.RuneError) || strings.IndexFunc(issue.Title, unicode.IsControl) >= 0 {
-		return errors.New("invalid issue title")
-	}
 	items, err := issueProposals(root, issue, engine)
 	if err != nil {
 		return err
 	}
-	return saveAndReview(root, items, "", issue.Title, true)
+	path, err := saveIssueProposal(root, items, issue)
+	if err != nil {
+		return err
+	}
+	fmt.Println(displayPath(root, path))
+	return run([]string{path})
 }
 
 func issueProposals(root string, issue githubIssue, engine string) ([]item, error) {
-	data, err := json.Marshal(issue)
+	data, err := issueJSON(issue)
 	if err != nil {
 		return nil, err
-	}
-	if len(data) > maxRequestBytes {
-		return nil, fmt.Errorf("issue #%d exceeds maximum input size (%d bytes)", issue.Number, maxRequestBytes)
 	}
 	prompt := fmt.Sprintf(issuePrompt, data)
 	return proposalsWithActivity(root, prompt, engine, 100*time.Second, os.Stderr, false, "Generating issue proposals")
