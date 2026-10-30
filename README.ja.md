@@ -60,7 +60,7 @@ prop-review ingest          # 設定済みエンジンを起動（初期値はpi
 prop-review ingest fx       # 今回だけ変更。piまたはfxのみ指定可能
 ```
 
-このGitリポジトリで対話型エージェントを起動し、`prop-review-ingest` に従って最新の完了済みレビュー（`proposal.txt` の更新時刻で選択）の履歴を検証し、結果の報告とコメントへの回答をチャットで行います。結果がなければエージェントが結果ファイルのパスを尋ねます。CLIとスキルはレビュー結果を変更せず、実装も開始しません。対象のCLIをインストール・認証してください。スキルは `~/.agents/skills/prop-review-ingest/SKILL.md` または `~/.pi/agent/skills/prop-review-ingest/SKILL.md` に配置します（上記のPiセットアップは後者）。fxにはスキルのパスを明示して渡します。`fx` は対話起動時の初期プロンプト指定に対応しないため、`fx ask --prompt-permissions` で初回応答を保存し、`fx --continue` でそのセッションを開きます。各エージェントの設定・ツール権限が適用され、`ingest` 自体はサンドボックスを設定しません。
+このGitリポジトリで対話型エージェントを起動し、`prop-review-ingest` に従って最新の完了済みレビュー（`proposal.txt` の更新時刻で選択）の履歴を検証し、結果の報告とコメントへの回答をチャットで行います。結果がなければエージェントが結果ファイルのパスを尋ねます。CLIとスキルはレビュー結果を変更せず、実装も開始しません。対象のCLIをインストール・認証してください。スキルは `~/.agents/skills/prop-review-ingest/SKILL.md` または `~/.pi/agent/skills/prop-review-ingest/SKILL.md` に配置します（上記のPiセットアップは後者）。fxにはスキルのパスを明示して渡します。`fx` は対話起動時の初期プロンプト指定に対応しないため、`fx ask --json --prompt-permissions` で新しい初回応答を保存し、JSON応答の `session_id` を指定した `fx --resume <id>` でそのセッションだけを開きます。ID欠落・不正応答・初回処理失敗時は再開せず、最新セッションにもフォールバックしません。結果の要約とコメントへの回答は、選択した提案本文と同じ言語で行うよう指示します。各エージェントの設定・ツール権限が適用され、`ingest` 自体はサンドボックスを設定しません。
 
 ### `prop-review generate`
 
