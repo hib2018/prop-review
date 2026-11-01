@@ -20,6 +20,7 @@ const { session } = await createAgentSession({
 });
 try {
   let prompt = "";
+  process.stdin.setEncoding("utf8");
   for await (const chunk of process.stdin) prompt += chunk;
   await session.prompt(prompt);
   const last = session.messages.findLast((message) => message.role === "assistant");
