@@ -184,17 +184,7 @@ func run(args []string) error {
 		if err := reviewWithExplanation(items, tty, tty, comment, explain); err != nil {
 			return err
 		}
-		f, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-		if err != nil {
-			return err
-		}
-		if _, err = io.WriteString(f, render(items)); err != nil {
-			f.Close()
-			os.Remove(output)
-			return err
-		}
-		if err = f.Close(); err != nil {
-			os.Remove(output)
+		if err := saveReview(output, items); err != nil {
 			return err
 		}
 		fmt.Println(displayCurrentPath(output))

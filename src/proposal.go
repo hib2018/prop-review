@@ -190,11 +190,16 @@ func saveProposalWithSnapshot(root string, items []item, parent, request string,
 	if err := os.MkdirAll(base, 0700); err != nil {
 		return "", err
 	}
-	if err := ensureReviewExcluded(root); err != nil {
-		return "", err
-	}
 	dir, err := os.MkdirTemp(base, "review.")
 	if err != nil {
+		return "", err
+	}
+	var paths []string
+	for _, name := range reviewFiles {
+		paths = append(paths, filepath.Join(dir, name))
+	}
+	if err := ensureReviewExcluded(root, paths...); err != nil {
+		os.Remove(dir)
 		return "", err
 	}
 	if parent != "" {
