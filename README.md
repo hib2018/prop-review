@@ -126,6 +126,10 @@ prop-review delete
 
 Choose among unreviewed proposals and reviewed proposals with comments but no child revision. Before deleting, the CLI displays the complete proposal and review (including approved items); confirm with `y/N`. Only `y` (or `Y`) deletes; Enter and all other answers cancel. Directories referenced by `parent.txt`, or candidates with links or unexpected files, are refused. Confirmation **permanently deletes** the selected `review.*` directory.
 
+### `prop-review doctor` / `prev doctor`
+
+Read-only local diagnostics for the saved engine, required commands, Pi SDK placement (when Pi is selected), effective Git exclusions (including tracked files), unsafe links/files, and missing, branched, cyclic or corrupt review history. An unreviewed leaf is normal. Reports repair suggestions only; never initializes storage, changes ignore rules, deletes files, or rewrites history. Does not launch an engine, import the SDK, or call authentication/external APIs. Pi placement uses local `npm root -g` with logging and update notification disabled. `gh` is needed for `issue`, and the `pi` CLI for Pi `ingest`. Exit status is 0 when checks pass, 1 when problems are found or diagnosis fails. Review suggestions manually before making changes.
+
 ### `prop-review engine` / `prop-review --engine NAME`
 
 ```sh
