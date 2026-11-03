@@ -168,15 +168,37 @@ func (r flowConfirmationReader) Read(p []byte) (int, error) {
 }
 
 func TestFlowRevalidatesAfterPreview(t *testing.T) {
-	for _, change := range []string{"review", "destination"} {
+	for _, change := range []string{"review", "destination", "overwrite", "deleted", "symlink", "directory", "invalid history"} {
 		t.Run(change, func(t *testing.T) {
 			root, original, _ := clarificationFixture(t)
 			inFixtureRepo(t, root)
 			path := filepath.Join(root, "prop-review-tmp", "flow.txt")
+			if change == "overwrite" || change == "deleted" {
+				if err := os.WriteFile(path, []byte("old flow"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			target := filepath.Join(root, "target")
+			if err := os.WriteFile(target, []byte("untouched"), 0600); err != nil {
+				t.Fatal(err)
+			}
 			reader := flowConfirmationReader{change: func() {
-				if change == "review" {
+				var err error
+				switch change {
+				case "review":
 					writeReview(t, original, []item{{topic: "承認事項"}, {topic: "未確認", answer: "Approved"}, {topic: "要改訂"}})
-				} else if err := os.WriteFile(path, []byte("concurrent change"), 0600); err != nil {
+				case "invalid history":
+					err = os.Remove(filepath.Join(filepath.Dir(original), "proposal.review.txt"))
+				case "deleted":
+					err = os.Remove(path)
+				case "symlink":
+					err = os.Symlink(target, path)
+				case "directory":
+					err = os.Mkdir(path, 0700)
+				default:
+					err = os.WriteFile(path, []byte("concurrent change"), 0600)
+				}
+				if err != nil {
 					t.Fatal(err)
 				}
 			}}
@@ -184,8 +206,23 @@ func TestFlowRevalidatesAfterPreview(t *testing.T) {
 				t.Fatal("saved stale preview")
 			}
 			data, err := os.ReadFile(path)
-			if change == "review" && !os.IsNotExist(err) || change == "destination" && (err != nil || string(data) != "concurrent change") {
-				t.Fatalf("unexpected output: %s, %v", data, err)
+			switch change {
+			case "review", "invalid history", "deleted":
+				if !os.IsNotExist(err) {
+					t.Fatalf("saved stale flow: %s, %v", data, err)
+				}
+			case "destination", "overwrite":
+				if err != nil || string(data) != "concurrent change" {
+					t.Fatalf("lost concurrent change: %s, %v", data, err)
+				}
+			case "symlink", "directory":
+				info, err := os.Lstat(path)
+				if err != nil || change == "symlink" && info.Mode()&os.ModeSymlink == 0 || change == "directory" && !info.IsDir() {
+					t.Fatalf("unsafe destination replaced: %v, %v", info, err)
+				}
+			}
+			if data, err := os.ReadFile(target); err != nil || string(data) != "untouched" {
+				t.Fatalf("symlink target changed: %s, %v", data, err)
 			}
 		})
 	}

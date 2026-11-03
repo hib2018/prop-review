@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -18,16 +20,7 @@ func saveFlowWithConfirmation(in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return confirmDocument(filepath.Join(root, "prop-review-tmp", "flow.txt"), body, "flow", in, out, func() error {
-		current, err := approvedFlow(root)
-		if err != nil {
-			return err
-		}
-		if current != body {
-			return errors.New("approved flow changed during confirmation; nothing saved")
-		}
-		return nil
-	})
+	return confirmFlow(root, body, in, out)
 }
 
 func approvedFlow(root string) (string, error) {
@@ -96,4 +89,89 @@ func flowTopic(topic string) string {
 		boxes = append(boxes, "┌"+border+"┐\n│ "+text+" │\n└"+border+"┘")
 	}
 	return strings.Join(boxes, "\n  │\n  ↓\n")
+}
+
+func confirmFlow(root, body string, in io.Reader, out io.Writer) error {
+	path := filepath.Join(root, "prop-review-tmp", "flow.txt")
+	old, err := existingFlow(path)
+	if err != nil {
+		return err
+	}
+	action := "Save new file"
+	if old != nil {
+		action = "Overwrite existing file"
+	}
+	fmt.Fprintf(out, "\nGenerated flow for %s:\n\n%s\n", displayCurrentPath(path), body)
+	if old != nil {
+		fmt.Fprintf(out, "Existing file will be replaced (%d bytes).\n", len(old))
+	}
+	answer, err := inputLine(bufio.NewReader(in), out, action+"? [y/N]: ", 32)
+	if err != nil || !strings.EqualFold(strings.TrimSpace(answer), "y") {
+		return fmt.Errorf("%s not saved: confirmation cancelled", filepath.Base(path))
+	}
+	currentBody, err := approvedFlow(root)
+	if err != nil {
+		return err
+	}
+	if currentBody != body {
+		return errors.New("approved flow changed during confirmation; nothing saved")
+	}
+	// Recheck before writing so a change made while the human reads the preview is not lost.
+	current, err := existingFlow(path)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(old, current) || (old == nil) != (current == nil) {
+		return fmt.Errorf("%s changed during confirmation; nothing saved", filepath.Base(path))
+	}
+	if old == nil {
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err != nil {
+			return err
+		}
+		if _, err = io.WriteString(f, body); err != nil {
+			f.Close()
+			os.Remove(path)
+			return err
+		}
+		if err = f.Close(); err != nil {
+			os.Remove(path)
+			return err
+		}
+	} else {
+		f, err := os.CreateTemp(filepath.Dir(path), ".flow-")
+		if err != nil {
+			return err
+		}
+		defer os.Remove(f.Name())
+		if err := f.Chmod(0600); err != nil {
+			f.Close()
+			return err
+		}
+		if _, err = io.WriteString(f, body); err != nil {
+			f.Close()
+			return err
+		}
+		if err = f.Close(); err != nil {
+			return err
+		}
+		if err := os.Rename(f.Name(), path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func existingFlow(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("unsafe output file: %s", path)
+	}
+	return os.ReadFile(path)
 }
