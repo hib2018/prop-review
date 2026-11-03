@@ -137,6 +137,10 @@ func saveSpecWithConfirmation(engine string, in io.Reader, out io.Writer) error 
 }
 
 func confirmSpec(path, body string, in io.Reader, out io.Writer, warnings ...string) error {
+	return confirmDocument(path, body, "memo", in, out, nil, warnings...)
+}
+
+func confirmDocument(path, body, kind string, in io.Reader, out io.Writer, validate func() error, warnings ...string) error {
 	old, err := existingSpec(path)
 	if err != nil {
 		return err
@@ -145,7 +149,7 @@ func confirmSpec(path, body string, in io.Reader, out io.Writer, warnings ...str
 	if old != nil {
 		action = "Overwrite existing file"
 	}
-	fmt.Fprintf(out, "\nGenerated memo for %s:\n\n%s\n", displayCurrentPath(path), body)
+	fmt.Fprintf(out, "\nGenerated %s for %s:\n\n%s\n", kind, displayCurrentPath(path), body)
 	if len(warnings) > 0 {
 		fmt.Fprintln(out, "Warnings (excluded or unverified reviews):")
 		root := filepath.Dir(filepath.Dir(path))
@@ -158,7 +162,12 @@ func confirmSpec(path, body string, in io.Reader, out io.Writer, warnings ...str
 	}
 	answer, err := inputLine(bufio.NewReader(in), out, action+"? [y/N]: ", 32)
 	if err != nil || !strings.EqualFold(strings.TrimSpace(answer), "y") {
-		return errors.New("spec not saved: confirmation cancelled")
+		return fmt.Errorf("%s not saved: confirmation cancelled", filepath.Base(path))
+	}
+	if validate != nil {
+		if err := validate(); err != nil {
+			return err
+		}
 	}
 	// Recheck before writing so a change made while the human reads the preview is not lost.
 	current, err := existingSpec(path)
@@ -166,7 +175,7 @@ func confirmSpec(path, body string, in io.Reader, out io.Writer, warnings ...str
 		return err
 	}
 	if !bytes.Equal(old, current) || (old == nil) != (current == nil) {
-		return errors.New("spec changed during confirmation; nothing saved")
+		return fmt.Errorf("%s changed during confirmation; nothing saved", filepath.Base(path))
 	}
 	if old == nil {
 		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
@@ -215,7 +224,7 @@ func existingSpec(path string) ([]byte, error) {
 		return nil, err
 	}
 	if !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("unsafe spec file: %s", path)
+		return nil, fmt.Errorf("unsafe output file: %s", path)
 	}
 	return os.ReadFile(path)
 }
