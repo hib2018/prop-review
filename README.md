@@ -6,7 +6,7 @@ A local CLI for reviewing proposals item by item. Source code lives in `src/`. C
 
 ## Install
 
-Run from this repository's root and add `~/.local/bin` to your `PATH`.
+Run from this repository's root and add `~/.local/bin` to your `PATH`. Interactive commands require a Unix-like environment with `/dev/tty`, `stty` on `PATH`, and an ANSI-compatible terminal. Piped stdin or a non-interactive agent shell is not a substitute for a controlling terminal; native Windows terminals are not supported.
 
 ```sh
 mkdir -p "$HOME/.local/bin"
