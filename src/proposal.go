@@ -190,6 +190,34 @@ func saveProposalWithSnapshot(root string, items []item, parent, request string,
 	if err := os.MkdirAll(base, 0700); err != nil {
 		return "", err
 	}
+	// shortcut: crashes leave this lock, use OS locks if automatic crash recovery is needed.
+	lock := filepath.Join(base, ".save.lock")
+	if err := os.Mkdir(lock, 0700); err != nil {
+		return "", fmt.Errorf("proposal save locked (%s): %w", lock, err)
+	}
+	defer os.Remove(lock)
+	if parent != "" {
+		name := filepath.Base(filepath.Dir(parent))
+		if filepath.Dir(filepath.Dir(parent)) != base || filepath.Base(parent) != "proposal.txt" || !strings.HasPrefix(name, "review.") || name == "review." {
+			return "", errors.New("invalid parent proposal path")
+		}
+		if _, err := localFile(parent); err != nil {
+			return "", fmt.Errorf("invalid parent proposal: %w", err)
+		}
+		paths, err := proposalPaths(root)
+		if err != nil {
+			return "", err
+		}
+		for _, path := range paths {
+			link, err := parentName(path)
+			if err != nil {
+				return "", err
+			}
+			if link == name {
+				return "", errors.New("parent proposal is no longer the latest in its chain")
+			}
+		}
+	}
 	dir, err := os.MkdirTemp(base, "review.")
 	if err != nil {
 		return "", err
@@ -203,12 +231,7 @@ func saveProposalWithSnapshot(root string, items []item, parent, request string,
 		return "", err
 	}
 	if parent != "" {
-		// The parent is another review directory under the same repository.
 		name := filepath.Base(filepath.Dir(parent))
-		if filepath.Dir(filepath.Dir(parent)) != base || filepath.Base(parent) != "proposal.txt" || !strings.HasPrefix(name, "review.") {
-			os.Remove(dir)
-			return "", errors.New("invalid parent proposal path")
-		}
 		if err := os.WriteFile(filepath.Join(dir, "parent.txt"), []byte(name+"\n"), 0600); err != nil {
 			os.RemoveAll(dir)
 			return "", err

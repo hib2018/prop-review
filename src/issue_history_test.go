@@ -274,10 +274,11 @@ func TestIssueHistoryValidatesChainBeforeSnapshot(t *testing.T) {
 					count = 2
 				}
 				for i := 0; i < count; i++ {
-					child, err := saveProposal(root, []item{{topic: "Wrong count one"}, {topic: "Wrong count two"}}, original)
+					child, err := saveProposal(root, []item{{topic: "Wrong count one"}, {topic: "Wrong count two"}}, "")
 					if err != nil {
 						t.Fatal(err)
 					}
+					initTestWrite(t, filepath.Join(filepath.Dir(child), "parent.txt"), filepath.Base(filepath.Dir(original))+"\n")
 					writeReview(t, child, []item{{topic: "Wrong count one"}, {topic: "Wrong count two"}})
 					latest = child
 				}
