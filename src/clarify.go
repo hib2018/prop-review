@@ -111,7 +111,7 @@ func reviewHistory(root, selected string, requireRequest bool) ([]reviewStep, st
 			if requireRequest {
 				return nil, "", err
 			}
-			continue // A malformed, unlinked review cannot invalidate an unrelated spec chain.
+			continue // A malformed, unlinked review cannot invalidate an unrelated review chain.
 		}
 		if parent != "" {
 			children[parent] = append(children[parent], name)

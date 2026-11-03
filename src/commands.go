@@ -59,16 +59,6 @@ func run(args []string) error {
 		}
 		return withRawTTY(func(tty *os.File) error { return deleteProposal(root, tty, tty) })
 	}
-	if len(args) > 0 && args[0] == "spec" {
-		if len(args) != 1 {
-			return errors.New("usage: prop-review spec")
-		}
-		engine, err := selectedEngine()
-		if err != nil {
-			return err
-		}
-		return saveSpec(engine)
-	}
 	if len(args) > 0 && args[0] == "clarify" {
 		if len(args) != 1 {
 			return errors.New("usage: prop-review clarify")
@@ -113,7 +103,7 @@ func run(args []string) error {
 		return generate(args[0] == "revise", engine, "")
 	}
 	if len(args) > 2 {
-		return errors.New("usage: prop-review [init|ingest [pi|fx]|delete|engine|--engine pi|fx|generate|clarify|spec|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
+		return errors.New("usage: prop-review [init|ingest [pi|fx]|delete|engine|--engine pi|fx|generate|clarify|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
 	}
 	if len(args) == 0 {
 		root, err := repoRoot()

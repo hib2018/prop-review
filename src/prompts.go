@@ -16,6 +16,3 @@ var issuePrompt string
 
 //go:embed prompts/clarify.txt
 var clarifyPrompt string
-
-//go:embed prompts/spec.txt
-var specPrompt string
