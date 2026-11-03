@@ -154,6 +154,9 @@ func proposalsWithActivity(root, prompt, engine string, timeout time.Duration, p
 }
 
 func engineResponse(root, prompt, engine string, timeout time.Duration, progress io.Writer, activity string) ([]byte, error) {
+	if err := checkReviewBase(root); err != nil {
+		return nil, err
+	}
 	if !validEngine(engine) {
 		return nil, fmt.Errorf("unknown engine: %s", engine)
 	}

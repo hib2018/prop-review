@@ -14,6 +14,9 @@ import (
 
 // The skill owns review selection, validation, and the reply; the CLI only starts the conversation.
 func ingest(root, engine string) error {
+	if err := checkReviewBase(root); err != nil {
+		return err
+	}
 	skill, err := findIngestSkill(root, engine)
 	if err != nil {
 		return err

@@ -85,6 +85,9 @@ func render(items []item) string {
 }
 
 func proposalPaths(root string) ([]string, error) {
+	if err := checkReviewBase(root); err != nil {
+		return nil, err
+	}
 	base := filepath.Join(root, "prop-review-tmp")
 	entries, err := os.ReadDir(base)
 	if errors.Is(err, os.ErrNotExist) {
@@ -180,6 +183,9 @@ func saveProposalWithMode(root string, items []item, parent, request string, fol
 }
 
 func saveProposalWithSnapshot(root string, items []item, parent, request string, followup, restructure bool, snapshot []byte) (string, error) {
+	if err := checkReviewBase(root); err != nil {
+		return "", err
+	}
 	if restructure && (parent == "" || followup) {
 		return "", errors.New("restructure needs a parent and cannot be a followup")
 	}
@@ -299,6 +305,9 @@ func revisableProposals(root string) ([]string, error) {
 }
 
 func resolveRevisionPath(root, input string) (string, error) {
+	if err := checkReviewBase(root); err != nil {
+		return "", err
+	}
 	abs, err := filepath.Abs(input)
 	if err != nil {
 		return "", err

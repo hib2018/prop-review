@@ -34,7 +34,7 @@ func initRepository(root string) error {
 			return err
 		}
 	}
-	if err := checkInitPath(root, filepath.Join(root, "prop-review-tmp"), nil); err != nil {
+	if err := checkReviewBase(root); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Join(root, "prop-review-tmp"), 0700); err != nil {
