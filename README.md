@@ -31,7 +31,7 @@ This installs both skills into the repository's `.pi/skills/` and `.agents/skill
 
 ## Commands
 
-Run inside a Git repository. Displayed paths are abbreviated within the repository: the common `prop-review-tmp/` prefix is omitted, so a proposal appears as `review.xxx/proposal.txt`. The actual file remains under `prop-review-tmp/`; include that prefix when passing a path back to the CLI. `prev` is a shorter name accepting the same commands and arguments as `prop-review` (for example, `prev spec`). `generate`, `issue`, `revise`, `clarify`, `spec`, and `ingest` use its `prop-review-tmp/` directory.
+Run inside a Git repository. Displayed paths are abbreviated within the repository: the common `prop-review-tmp/` prefix is omitted, so a proposal appears as `review.xxx/proposal.txt`. The actual file remains under `prop-review-tmp/`; include that prefix when passing a path back to the CLI. `prev` is a shorter name accepting the same commands and arguments as `prop-review` (for example, `prev spec`). `generate`, `issue`, `revise`, `clarify`, `spec`, `flow`, and `ingest` use its `prop-review-tmp/` directory.
 
 ### `prop-review init` / `prev init`
 
@@ -109,6 +109,16 @@ prop-review clarify
 ```
 
 Select a root request or issue title and validate its full review history. If active unresolved comments remain, reconstruct the whole proposal using the same history and approved constraints as `revise`: items may be merged, split, removed, added, or reordered, including pending items and necessary additional questions. Even with 10 or more unresolved items, the engine runs and its output must contain 1–10 valid, unique items. The new proposal links to the latest review via `parent.txt` and `revision.txt` (`restructure\n`), superseding all earlier unresolved items without revoking historical approvals. All new items are unapproved, including unchanged wording. Without active comments, carry pending items forward and look only for additional questions; save this proposal with `followup.txt` and `parent.txt`. If everything is resolved and no additional questions are needed, save nothing. `clarify` starts review after saving, never implementation; `revise` still does not start review automatically. Legacy roots without `request.txt`, missing or invalid results, and ambiguous histories fail. Generation failures save nothing. The clarification check used by `spec` only detects questions; it never reconstructs or saves a proposal or starts review.
+
+### `prop-review flow`
+
+```sh
+prop-review flow
+```
+
+Validate the latest history of all review chains and save valid approved topics as terminal-readable boxes in `prop-review-tmp/flow.txt`. No engine is used. Only explicit `→` transitions within an approved topic (for example, `Input → Decision → Save`) become arrows between boxes; other topics remain verbatim in a single box. Decision conditions remain in the approved wording. Relationships, ordering between topics, and branches are never inferred. Empty arrow endpoints leave the topic unsplit.
+
+Preview the full diagram and destination before confirming with `y` / `Y` for both creation and overwrite. History and destination are checked again before saving. No approvals, invalid or ambiguous history, or an unreviewed successor stops saving with a reason. Independent unreviewed drafts are ignored. Existing proposals, reviews, and `spec.md` are not changed.
 
 ### `prop-review spec`
 
