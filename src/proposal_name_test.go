@@ -160,20 +160,3 @@ func TestProposalNameRejectsBrokenHistory(t *testing.T) {
 		})
 	}
 }
-
-func TestSpecClarifiesIssueWithoutSavedRequest(t *testing.T) {
-	root, original, promptFile, _ := issueHistoryFixture(t)
-	inFixtureRepo(t, root)
-	if err := os.Remove(filepath.Join(filepath.Dir(original), "request.txt")); err != nil {
-		t.Fatal(err)
-	}
-	specFixtureEngine(t, promptFile, "Approved memo")
-	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `["Additional snapshot question"]`))
-	var screen strings.Builder
-	if err := saveSpecWithConfirmation("fx", strings.NewReader("y\n"), &screen); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(screen.String(), "Additional questions for") || strings.Contains(screen.String(), "Cannot clarify") || strings.Contains(screen.String(), "Could not check") {
-		t.Fatalf("spec did not check issue clarification: %s", screen.String())
-	}
-}

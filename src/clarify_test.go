@@ -132,8 +132,8 @@ func TestActivityProgress(t *testing.T) {
 	root, _, _ := clarificationFixture(t)
 	t.Setenv("CLARIFY_OUTPUT", fxJSON(t, `[]`))
 	var progress bytes.Buffer
-	_, err := proposalsWithActivity(root, "prompt", "fx", 5*time.Second, &progress, true, "Checking spec clarifications")
-	if err != nil || !strings.Contains(progress.String(), "Checking spec clarifications with fx...") || strings.Contains(progress.String(), "Generating proposals") {
+	_, err := proposalsWithActivity(root, "prompt", "fx", 5*time.Second, &progress, true, "Checking clarifications")
+	if err != nil || !strings.Contains(progress.String(), "Checking clarifications with fx...") || strings.Contains(progress.String(), "Generating proposals") {
 		t.Fatalf("progress: %q, %v", progress.String(), err)
 	}
 }
