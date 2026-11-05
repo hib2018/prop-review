@@ -314,10 +314,11 @@ func TestClarificationRejectsBrokenHistoryBeforeEngine(t *testing.T) {
 			case "bad_parent":
 				os.WriteFile(filepath.Join(filepath.Dir(child), "parent.txt"), []byte("../../outside\n"), 0600)
 			case "fork":
-				sibling, e := saveProposal(root, []item{{topic: "未確認"}, {topic: "改訂再び"}}, original)
+				sibling, e := saveProposal(root, []item{{topic: "未確認"}, {topic: "改訂再び"}}, "")
 				if e != nil {
 					t.Fatal(e)
 				}
+				initTestWrite(t, filepath.Join(filepath.Dir(sibling), "parent.txt"), filepath.Base(filepath.Dir(original))+"\n")
 				writeReview(t, sibling, []item{{topic: "未確認"}, {topic: "改訂再び", answer: "Approved"}})
 			case "pending_changed":
 				os.WriteFile(child, []byte(render([]item{{topic: "別の未確認"}, {topic: "改訂済み"}})), 0600)
