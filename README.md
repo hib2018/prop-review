@@ -6,7 +6,7 @@ A local CLI for reviewing proposals item by item. Source code lives in `src/`. C
 
 ## Install
 
-Run from this repository's root and add `~/.local/bin` to your `PATH`.
+Run from this repository's root and add `~/.local/bin` to your `PATH`. Interactive commands require a Unix-like environment with `/dev/tty`, `stty` on `PATH`, and an ANSI-compatible terminal. Piped stdin or a non-interactive agent shell is not a substitute for a controlling terminal; native Windows terminals are not supported.
 
 ```sh
 mkdir -p "$HOME/.local/bin"
@@ -110,7 +110,7 @@ Select a reviewed proposal with comments, or specify a proposal in the same repo
 prop-review clarify
 ```
 
-Select a root request or issue title and validate its full review history. If active unresolved comments remain, reconstruct the whole proposal using the same history and approved constraints as `revise`: items may be merged, split, removed, added, or reordered, including pending items and necessary additional questions. Even with 10 or more unresolved items, the engine runs and its output must contain 1–10 valid, unique items. The new proposal links to the latest review via `parent.txt` and `revision.txt` (`restructure\n`), superseding all earlier unresolved items without revoking historical approvals. All new items are unapproved, including unchanged wording. Without active comments, carry pending items forward and look only for additional questions; save this proposal with `followup.txt` and `parent.txt`. If everything is resolved and no additional questions are needed, save nothing. `clarify` starts review after saving, never implementation; `revise` still does not start review automatically. Legacy roots without `request.txt`, missing or invalid results, and ambiguous histories fail. Generation failures save nothing.
+Select a root request or issue title and validate its full review history. If active unresolved comments remain, reconstruct the whole proposal using the same history and approved constraints as `revise`: items may be merged, split, removed, added, or reordered, including pending items and necessary additional questions. Even with 10 or more unresolved items, the engine runs and its output must contain 1–10 valid, unique items. The new proposal links to the latest review via `parent.txt` and `revision.txt` (`restructure\n`), superseding all earlier unresolved items without revoking historical approvals. All new items are unapproved, including unchanged wording. Without active comments, carry pending items forward and look only for additional questions; save this proposal with `followup.txt` and `parent.txt`. If everything is resolved and no additional questions are needed, save nothing. `clarify` starts review after saving, never implementation; `revise` still does not start review automatically. Legacy roots without both `request.txt` and a valid `issue.json`, missing or invalid results, and ambiguous histories fail. A valid root `issue.json` takes precedence over `request.txt`: its title restores the request and its snapshot supplies the original issue context, even if `request.txt` is missing. An invalid `issue.json` fails without falling back to `request.txt`. Generation failures save nothing.
 
 ### `prop-review delete`
 
