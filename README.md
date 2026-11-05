@@ -33,7 +33,7 @@ This installs both skills into the repository's `.pi/skills/` and `.agents/skill
 
 ## Commands
 
-Run inside a Git repository. Displayed paths are abbreviated within the repository: the common `prop-review-tmp/` prefix is omitted, so a proposal appears as `review.xxx/proposal.txt`. The actual file remains under `prop-review-tmp/`; include that prefix when passing a path back to the CLI. `prev` is a shorter name accepting the same commands and arguments as `prop-review` (for example, `prev clarify`). `generate`, `issue`, `revise`, `clarify`, and `ingest` use its `prop-review-tmp/` directory.
+Run inside a Git repository. Displayed paths are abbreviated within the repository: the common `prop-review-tmp/` prefix is omitted, so a proposal appears as `review.xxx/proposal.txt`. The actual file remains under `prop-review-tmp/`; include that prefix when passing a path back to the CLI. `prev` is a shorter name accepting the same commands and arguments as `prop-review` (for example, `prev flow`). `generate`, `issue`, `revise`, `clarify`, and `ingest` use its `prop-review-tmp/` directory. `flow` reads code rather than review history.
 
 ### `prop-review init` / `prev init`
 
@@ -111,6 +111,20 @@ prop-review clarify
 ```
 
 Select a root request or issue title and validate its full review history. If active unresolved comments remain, reconstruct the whole proposal using the same history and approved constraints as `revise`: items may be merged, split, removed, added, or reordered, including pending items and necessary additional questions. Even with 10 or more unresolved items, the engine runs and its output must contain 1–10 valid, unique items. The new proposal links to the latest review via `parent.txt` and `revision.txt` (`restructure\n`), superseding all earlier unresolved items without revoking historical approvals. All new items are unapproved, including unchanged wording. Without active comments, carry pending items forward and look only for additional questions; save this proposal with `followup.txt` and `parent.txt`. If everything is resolved and no additional questions are needed, save nothing. `clarify` starts review after saving, never implementation; `revise` still does not start review automatically. Legacy roots without both `request.txt` and a valid `issue.json`, missing or invalid results, and ambiguous histories fail. A valid root `issue.json` takes precedence over `request.txt`: its title restores the request and its snapshot supplies the original issue context, even if `request.txt` is missing. An invalid `issue.json` fails without falling back to `request.txt`. Generation failures save nothing.
+
+### `prop-review flow`
+
+```sh
+prop-review flow
+```
+
+Read the current Git repository's README, entry points, and event-handling code, then ask the selected Pi/fx engine for a simple overview of its main user-facing operations. Entry points can be CLI commands, TUI key actions, or screen transitions; a CLI is not assumed. Usually show 3–6 major steps per operation (1–2 for simple operations), **each step in a box connected by arrows** on stdout. For an important condition, the last main box is a decision with 2–3 labeled paths. Wide terminals show centered main steps and side-by-side branches; narrow terminals use a vertical sibling tree. This does not use approval history, source IDs, internal function names, or timing tables. The LLM returns short JSON; Go validates it and draws the boxes.
+
+Context comes from working-tree files, prioritizing README, main manifests, entry points, and TUI app/model/update/view, key/event handlers, and screen code: at most 32 files, 32 KiB per file, and 128 KiB of JSON total. A short warning identifies partial context when files are omitted. Review artifacts, `.env`, hidden paths, secret-like settings, dependencies, tests, binary files, and symlinks are excluded. Secrets embedded directly in ordinary source code are not automatically detected. The generated overview is limited to the supplied code and cannot guarantee complete behavioral accuracy.
+
+There is no save confirmation or generated file; existing `flow.txt`, proposals, and reviews remain untouched. Normal output contains only diagrams and short notes; a progress spinner goes to stderr. The engine timeout is 100 seconds. Changed source during generation stops output. Responses are limited to 64 KiB, 32 operations, 1–6 main steps, and 1–3 steps per branch; rendered output is limited to 1 MiB. Each operation can end in one important split. Nested branches, rejoining, and minor exception paths stay out of the diagram and may be summarized in a short note. Invalid UTF-8, terminal controls, and bidi controls are rejected. Text wraps to the terminal width, defaulting to 80 columns and capped at 80; widths below eight fail.
+
+Flow-only overrides remain available: `PROP_REVIEW_FLOW_MODEL` (Pi: `provider/model-id`; fx: a supported model ID) and `PROP_REVIEW_FLOW_THINKING` (Pi: `off`, `low`, `medium`, `high`; fx: supported `--effort` values). Defaults are the engine's model, Pi thinking `off`, and fx's normal effort. Other commands' settings are unchanged. Pi uses a tool-free session with only the supplied code. fx uses `fx ask --no-save --json`; its prompt forbids extra reads and tools, but enforcing those permissions still requires user configuration.
 
 ### `prop-review delete`
 

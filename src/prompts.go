@@ -16,3 +16,6 @@ var issuePrompt string
 
 //go:embed prompts/clarify.txt
 var clarifyPrompt string
+
+//go:embed prompts/flow.txt
+var flowPrompt string

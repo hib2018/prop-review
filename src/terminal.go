@@ -105,7 +105,7 @@ func reviewWithExplanation(items []item, in io.Reader, out io.Writer, comment fu
 
 // ponytail: width covers common Japanese/fullwidth/emoji; use a terminal-width library if other scripts need exact cursor placement.
 func displayWidth(r rune) int {
-	if unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul) || r >= 0x3000 && r <= 0x303f || r >= 0xff01 && r <= 0xff60 || r >= 0x1f300 && r <= 0x1faff {
+	if unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul) || r >= 0x3000 && r <= 0x303f || r >= 0x30a0 && r <= 0x30ff || r >= 0xff01 && r <= 0xff60 || r >= 0x1f300 && r <= 0x1faff {
 		return 2
 	}
 	return 1

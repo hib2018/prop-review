@@ -73,7 +73,6 @@ func TestUnsafeReviewBase(t *testing.T) {
 				{"revise explicit", func() error { return generate(true, "fx", selected) }},
 				{"issue", func() error { return generateIssue("fx") }},
 				{"clarify", func() error { _, _, err := clarificationQuestions(root, selected, "fx"); return err }},
-				{"spec", func() error { return saveSpecWithConfirmation("fx", strings.NewReader("y\n"), io.Discard) }},
 				{"init", func() error { return initRepository(root) }},
 				{"delete", func() error { _, err := deletionReferences(root); return err }},
 			}
