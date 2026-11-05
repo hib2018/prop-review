@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -33,14 +32,6 @@ func TestUserFacingPathsAreShortWithoutChangingSelection(t *testing.T) {
 	menu.Reset()
 	if err := deleteProposal(root, strings.NewReader("1\nN\n"), &menu); err == nil || strings.Contains(menu.String(), root) || !strings.Contains(menu.String(), "Delete: "+filepath.Base(filepath.Dir(proposal))) {
 		t.Fatalf("delete preview: %q, %v", menu.String(), err)
-	}
-	var preview strings.Builder
-	flow := filepath.Join(root, "prop-review-tmp", "flow.txt")
-	if err := saveFlowWithConfirmation(strings.NewReader("N\n"), &preview); err == nil || strings.Contains(preview.String(), root) || !strings.Contains(preview.String(), "Generated flow for flow.txt:") {
-		t.Fatalf("flow preview: %q, %v", preview.String(), err)
-	}
-	if _, err := os.Stat(flow); !os.IsNotExist(err) {
-		t.Fatalf("cancelled flow was saved: %v", err)
 	}
 	if got := displayMessage(root, "invalid "+proposal+" and "+outside); !strings.Contains(got, "review.") || !strings.Contains(got, outside) || strings.Contains(got, root) {
 		t.Fatalf("error message: %q", got)

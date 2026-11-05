@@ -63,7 +63,11 @@ func run(args []string) error {
 		if len(args) != 1 {
 			return errors.New("usage: prop-review flow")
 		}
-		return withRawTTY(func(tty *os.File) error { return saveFlowWithConfirmation(tty, tty) })
+		engine, err := selectedEngine()
+		if err != nil {
+			return err
+		}
+		return showFlow(engine, os.Stdout, os.Stderr)
 	}
 	if len(args) > 0 && args[0] == "clarify" {
 		if len(args) != 1 {

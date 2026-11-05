@@ -59,7 +59,7 @@ func reconstructionPromptFromHistory(history []reviewStep, request string) (stri
 	return fmt.Sprintf(revisePrompt, data), nil
 }
 
-// The same chronological interpretation feeds revision, clarification and flow.
+// The same chronological interpretation feeds revision and clarification.
 // Historical approvals constrain generation; outstanding describes the current review state.
 type reviewTopic struct {
 	Topic   string `json:"topic"`
