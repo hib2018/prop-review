@@ -12,6 +12,22 @@ import (
 
 var reviewFiles = []string{"request.txt", "proposal.txt", "proposal.review.txt", "issue.json", "parent.txt", "followup.txt", "revision.txt"}
 
+// A missing base may be created later, but an existing base must not be a link.
+func checkReviewBase(root string) error {
+	base := filepath.Join(root, "prop-review-tmp")
+	info, err := os.Lstat(base)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("unsafe review directory: %s", base)
+	}
+	return nil
+}
+
 // Keep ephemeral reviews out of Git without changing tracked project files.
 func ensureReviewExcluded(root string, paths ...string) error {
 	if len(paths) == 0 {
@@ -82,6 +98,9 @@ func saveReview(output string, items []item) error {
 	dir := filepath.Dir(path)
 	base := filepath.Dir(dir)
 	if filepath.Base(base) == "prop-review-tmp" && strings.HasPrefix(filepath.Base(dir), "review.") {
+		if err := checkReviewBase(filepath.Dir(base)); err != nil {
+			return err
+		}
 		if err := checkReviewExcluded(filepath.Dir(base), path); err != nil {
 			return err
 		}

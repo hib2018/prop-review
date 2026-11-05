@@ -15,17 +15,13 @@ import (
 // cause a scan or a later removal to reach outside this repository.
 func deletionReferences(root string) (map[string]bool, error) {
 	base := filepath.Join(root, "prop-review-tmp")
-	info, err := os.Lstat(base)
+	if err := checkReviewBase(root); err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(base)
 	if errors.Is(err, os.ErrNotExist) {
 		return map[string]bool{}, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return nil, fmt.Errorf("unsafe review directory: %s", base)
-	}
-	entries, err := os.ReadDir(base)
 	if err != nil {
 		return nil, err
 	}

@@ -24,6 +24,9 @@ func reconstructionMarker(path string) (bool, error) {
 
 // Validate the entire linked discussion before sending review data to an engine.
 func reconstructionPrompt(root, selected string) (string, error) {
+	if err := checkReviewBase(root); err != nil {
+		return "", err
+	}
 	first := selected
 	visited := make(map[string]bool)
 	for {

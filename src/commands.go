@@ -252,6 +252,9 @@ func generate(revise bool, engine, specified string) error {
 	if err != nil {
 		return err
 	}
+	if err := checkReviewBase(root); err != nil {
+		return err
+	}
 	var prompt string
 	var original []item
 	var parent, request string
@@ -401,6 +404,9 @@ func selectIssue(issues []githubIssue, in io.Reader, out io.Writer) (githubIssue
 func generateIssue(engine string) error {
 	root, err := repoRoot()
 	if err != nil {
+		return err
+	}
+	if err := checkReviewBase(root); err != nil {
 		return err
 	}
 	issues, err := listIssues(root)
