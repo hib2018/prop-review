@@ -170,6 +170,9 @@ func engineResponse(root, prompt, engine string, timeout time.Duration, progress
 		cmd.Stdin = strings.NewReader(prompt)
 	case "pi":
 		npm := exec.CommandContext(ctx, "npm", "root", "-g")
+		if err := configureEngineProcess(npm); err != nil {
+			return nil, err
+		}
 		npm.WaitDelay = time.Second
 		modules := &limitedCapture{limit: maxNpmOutputBytes, cancel: cancel}
 		npmErrors := &limitedCapture{limit: maxEngineErrorBytes, cancel: cancel}
@@ -193,6 +196,9 @@ func engineResponse(root, prompt, engine string, timeout time.Duration, progress
 		return nil, fmt.Errorf("unknown engine: %s", engine)
 	}
 	cmd.Dir = root
+	if err := configureEngineProcess(cmd); err != nil {
+		return nil, err
+	}
 	cmd.WaitDelay = time.Second
 	stdout := &limitedCapture{limit: maxEngineOutputBytes, cancel: cancel}
 	stderr := &limitedCapture{limit: maxEngineErrorBytes, cancel: cancel}

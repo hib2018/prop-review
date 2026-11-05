@@ -17,6 +17,8 @@ if ! command -v prev >/dev/null 2>&1 && [ ! -e "$HOME/.local/bin/prev" ] && [ ! 
 fi
 ```
 
+Non-interactive engine requests support macOS and Linux. Each engine command (including `npm root -g`) runs in a dedicated process group; timeout or stdout/stderr limit violations immediately send SIGKILL to the whole group, including descendants. Descendants that deliberately leave the group (for example via `setsid`) are outside this guarantee. Other operating systems reject these requests before starting a process. This policy does not apply to interactive `ingest` sessions.
+
 Installation only places the binary and the short-command link; it does not install skills in your home directory. Re-run the `go build` command above after updating the CLI or bundled skill sources.
 
 ### Initialize a target repository
