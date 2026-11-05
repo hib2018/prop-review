@@ -188,7 +188,7 @@ func engineResponse(root, prompt, engine string, timeout time.Duration, progress
 			if ctx.Err() != nil {
 				return nil, fmt.Errorf("%s timed out after %s: %w", engine, timeout, ctx.Err())
 			}
-			return nil, fmt.Errorf("locate Pi SDK (npm root -g): %w: %s", err, strings.TrimSpace(npmErrors.String()))
+			return nil, fmt.Errorf("locate Pi SDK (npm root -g): %w: %q", err, strings.TrimSpace(npmErrors.String()))
 		}
 		cmd = exec.CommandContext(ctx, "node", "--input-type=module", "-e", piSDK, strings.TrimSpace(modules.String()))
 		cmd.Stdin = strings.NewReader(prompt)
@@ -208,13 +208,13 @@ func engineResponse(root, prompt, engine string, timeout time.Duration, progress
 		return nil, fmt.Errorf("%s stdout exceeds %d bytes", engine, maxEngineOutputBytes)
 	}
 	if stderr.exceeded.Load() {
-		return nil, fmt.Errorf("%s stderr exceeds %d bytes: %s", engine, maxEngineErrorBytes, strings.TrimSpace(stderr.String()))
+		return nil, fmt.Errorf("%s stderr exceeds %d bytes: %q", engine, maxEngineErrorBytes, strings.TrimSpace(stderr.String()))
 	}
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("%s timed out after %s: %w", engine, timeout, ctx.Err())
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%s failed: %w: %s", engine, err, strings.TrimSpace(stderr.String()))
+		return nil, fmt.Errorf("%s failed: %w: %q", engine, err, strings.TrimSpace(stderr.String()))
 	}
 	output := stdout.Bytes()
 	if engine == "fx" {
