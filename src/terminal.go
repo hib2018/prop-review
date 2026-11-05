@@ -174,6 +174,12 @@ func terminalColumns(out io.Writer, fallback int) int {
 }
 
 func inputLine(r *bufio.Reader, out io.Writer, prompt string, maxBytes int) (string, error) {
+	var resized chan os.Signal
+	if _, ok := out.(*os.File); ok {
+		resized = make(chan os.Signal, 1)
+		signal.Notify(resized, syscall.SIGWINCH)
+		defer signal.Stop(resized)
+	}
 	// Non-terminal writers do not have a screen edge.
 	width := max(terminalColumns(out, 1<<30), 2) // Wide characters need at least two columns.
 	prefix := []rune(prompt[strings.LastIndex(prompt, "\n")+1:])
@@ -204,6 +210,16 @@ func inputLine(r *bufio.Reader, out io.Writer, prompt string, maxBytes int) (str
 		row, col := position(cursor)
 		moveCursor(out, endRow, row, col)
 	}
+	refreshWidth := func() {
+		next := max(terminalColumns(out, 1<<30), 2)
+		if next == width {
+			return
+		}
+		oldRow, _ := position(cursor)
+		width = next
+		endRow, endCol = visualPosition(append(append([]rune(nil), prefix...), line...), width)
+		redraw(oldRow)
+	}
 	badEncoding, tooLong := false, false
 	type runeResult struct {
 		key rune
@@ -214,14 +230,36 @@ func inputLine(r *bufio.Reader, out io.Writer, prompt string, maxBytes int) (str
 	hasQueued := false
 	for {
 		var current runeResult
+		if resized != nil && pending == nil && !hasQueued {
+			result := make(chan runeResult, 1)
+			pending = result
+			go func() {
+				key, _, err := r.ReadRune()
+				result <- runeResult{key, err}
+			}()
+		}
 		switch {
 		case hasQueued:
 			current, hasQueued = queued, false
 		case pending != nil:
-			current = <-pending
-			pending = nil
+			select {
+			case current = <-pending:
+				pending = nil
+			case <-resized:
+				refreshWidth()
+				continue
+			}
 		default:
 			current.key, _, current.err = r.ReadRune()
+		}
+		if resized == nil {
+			refreshWidth()
+		} else {
+			select {
+			case <-resized:
+				refreshWidth()
+			default:
+			}
 		}
 		if current.err != nil {
 			return "", current.err
