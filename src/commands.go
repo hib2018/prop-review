@@ -70,6 +70,10 @@ func run(args []string) error {
 		return withRawTTY(func(tty *os.File) error { return deleteProposal(root, tty, tty) })
 	}
 	if len(args) > 0 && args[0] == "flow" {
+		if len(args) == 2 && args[1] == "--help" {
+			fmt.Println("usage: prop-review flow\nExecute only explicitly approved proposals from validated repository review histories using the selected Pi/fx engine. Conflicts or missing approvals stop dependent work. No approvals means no engine call or changes.")
+			return nil
+		}
 		if len(args) != 1 {
 			return errors.New("usage: prop-review flow")
 		}

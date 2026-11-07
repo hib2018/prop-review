@@ -14,9 +14,9 @@ import (
 //go:embed pi_flow.mjs
 var piFlowSDK string
 
-// Pi flow gets no project resources or tools; fx retains its existing CLI setup.
+// Both engines execute approved work with their normal permission boundary.
 func flowEngineResponse(root, prompt, engine string, progress io.Writer) ([]byte, error) {
-	return flowEngineResponseWithTimeout(root, prompt, engine, progress, 100*time.Second)
+	return flowEngineResponseWithTimeout(root, prompt, engine, progress, 30*time.Minute)
 }
 
 func flowEngineResponseWithTimeout(root, prompt, engine string, progress io.Writer, timeout time.Duration) ([]byte, error) {
@@ -28,10 +28,9 @@ func flowEngineResponseWithTimeout(root, prompt, engine string, progress io.Writ
 	if progress == nil {
 		progress = io.Discard
 	}
-	defer startSpinner(progress, "Drawing operation flows", engine)()
+	defer startSpinner(progress, "Executing approved proposals", engine)()
 
 	if engine == "fx" {
-		// shortcut: fx ask has no verified tool-free API; retain its normal CLI until one exists.
 		args := []string{"ask", "--no-save", "--json"}
 		var help []byte
 		for _, option := range []struct{ env, flag string }{
@@ -79,8 +78,18 @@ func flowEngineResponseWithTimeout(root, prompt, engine string, progress io.Writ
 }
 
 func flowCommandOutput(ctx context.Context, cancel context.CancelFunc, cmd *exec.Cmd, name string, timeout time.Duration, limit int) ([]byte, error) {
-	// shortcut: CommandContext kills only the direct child; use OS-specific process groups for descendant cleanup.
-	cmd.WaitDelay = time.Second
+	if err := configureEngineProcess(cmd); err != nil {
+		return nil, err
+	}
+	// Give the SDK time to abort detached tool processes before killing its group.
+	kill := cmd.Cancel
+	cmd.Cancel = func() error {
+		if err := cmd.Process.Signal(os.Interrupt); err == nil {
+			time.Sleep(time.Second)
+		}
+		return kill()
+	}
+	cmd.WaitDelay = 3 * time.Second
 	stdout := &limitedCapture{limit: limit, cancel: cancel}
 	stderr := &limitedCapture{limit: maxEngineErrorBytes, cancel: cancel}
 	cmd.Stdout, cmd.Stderr = stdout, stderr

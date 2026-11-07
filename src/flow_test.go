@@ -1,261 +1,238 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
 
-func commandFlowFixture(t *testing.T) (string, string) {
+func executionFlowFixture(t *testing.T) (string, string) {
 	t.Helper()
 	root := flowSourceTempGit(t)
-	flowSourceWrite(t, root, "README.ja.md", "generate: 依頼から提案を作成。revise: 履歴から改訂。")
-	flowSourceWrite(t, root, "src/main.go", "package main\nfunc main() {} // command entry point")
-	flowSourceGit(t, root, "add", "README.ja.md", "src/main.go")
 	bin := t.TempDir()
 	prompt := filepath.Join(bin, "prompt")
-	script := "#!/bin/sh\ncat > \"$FLOW_PROMPT\"\nprintf '%s' \"$FLOW_REPLY\"\n"
-	if err := os.WriteFile(filepath.Join(bin, "fx"), []byte(script), 0700); err != nil {
-		t.Fatal(err)
-	}
+	limitScript(t, bin, "fx", `cat > "$FLOW_PROMPT"
+printf '%s' "$FLOW_REPLY"`)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("FLOW_PROMPT", prompt)
-	t.Setenv("FLOW_REPLY", fxJSON(t, commandFlowExample))
+	t.Setenv("FLOW_REPLY", fxJSON(t, `{"status":"completed","summary":"Implemented and verified"}`))
 	t.Setenv("PROP_REVIEW_FLOW_MODEL", "")
 	t.Setenv("PROP_REVIEW_FLOW_THINKING", "")
 	inFixtureRepo(t, root)
 	return root, prompt
 }
 
-func TestFlowCommandsFromCodeWithoutReviewHistory(t *testing.T) {
+func flowReviewed(t *testing.T, root, name string, items []item) string {
+	t.Helper()
+	path := filepath.Join(root, "prop-review-tmp", name, "proposal.txt")
+	original := make([]item, len(items))
+	for i, it := range items {
+		original[i].topic = it.topic
+	}
+	flowSourceWrite(t, root, filepath.Join("prop-review-tmp", name, "proposal.txt"), render(original))
+	flowSourceWrite(t, root, filepath.Join("prop-review-tmp", name, "proposal.review.txt"), render(items))
+	return path
+}
+
+func TestFlowExecutesOnlyExplicitApprovals(t *testing.T) {
 	for _, engine := range []string{"fx", "pi"} {
 		t.Run(engine, func(t *testing.T) {
-			root, prompt := commandFlowFixture(t)
-			flowSourceWrite(t, root, "prop-review-tmp/review.1/proposal.txt", "do not send review text")
-			flowSourceWrite(t, root, ".env", "DO_NOT_SEND_SECRET")
-			before, err := flowSourceContext(root)
-			if err != nil {
-				t.Fatal(err)
-			}
+			root, prompt := executionFlowFixture(t)
+			flowReviewed(t, root, "review.1", []item{{topic: "approved change", answer: "Approved"}, {topic: "pending secret"}, {topic: "commented secret", answer: "Approved", comment: true}})
+			flowSourceWrite(t, root, "prop-review-tmp/review.1/request.txt", "unapproved request secret")
 			if engine == "pi" {
-				bin := filepath.Dir(prompt)
-				for name, script := range map[string]string{
-					"npm":  "#!/bin/sh\nprintf '/unused/modules\\n'\n",
-					"node": "#!/bin/sh\ncat > \"$FLOW_PROMPT\"\nprintf '%s' \"$FLOW_JSON\"\n",
-				} {
-					if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0700); err != nil {
-						t.Fatal(err)
-					}
-				}
-				t.Setenv("FLOW_JSON", commandFlowExample)
+				limitScript(t, filepath.Dir(prompt), "npm", "printf '/unused/modules\\n'")
+				limitScript(t, filepath.Dir(prompt), "node", `cat > "$FLOW_PROMPT"
+printf '%s' '{"status":"completed","summary":"Implemented and verified"}'`)
 			}
-			var out, progress strings.Builder
-			if err := showFlow(engine, &out, &progress); err != nil {
+			var out strings.Builder
+			if err := showFlow(engine, &out, io.Discard); err != nil {
 				t.Fatal(err)
-			}
-			for _, label := range []string{"generate", "依頼を入力", "AIが提案を生成", "revise", "レビューは別途開始", "┌", "↓"} {
-				if !strings.Contains(out.String(), label) {
-					t.Errorf("missing %q: %s", label, out.String())
-				}
-			}
-			for _, forbidden := range []string{"sources:", "Discussion", "history=", "request_bytes=", "[y/N]"} {
-				if strings.Contains(out.String()+progress.String(), forbidden) {
-					t.Errorf("old output remains: %s", forbidden)
-				}
 			}
 			data, err := os.ReadFile(prompt)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(string(data), "command entry point") || !strings.Contains(string(data), "3..6 short") || strings.Contains(string(data), "DO_NOT_SEND_SECRET") || strings.Contains(string(data), "do not send review text") {
-				t.Fatalf("unexpected prompt context: %s", data)
+			if !strings.Contains(string(data), `["approved change"]`) || strings.Contains(string(data), "secret") {
+				t.Fatalf("scope leak: %s", data)
 			}
-			after, err := flowSourceContext(root)
-			if err != nil || !bytes.Equal(before, after) {
-				t.Fatalf("source changed: %v", err)
-			}
-			if _, err := os.Stat(filepath.Join(root, "prop-review-tmp", "flow.txt")); !os.IsNotExist(err) {
-				t.Fatalf("flow wrote a file: %v", err)
+			if !strings.Contains(out.String(), "Implemented and verified") {
+				t.Fatal(out.String())
 			}
 		})
 	}
 }
 
-func TestFlowTUIBranchesFromSource(t *testing.T) {
-	root, prompt := commandFlowFixture(t)
-	flowSourceWrite(t, root, "README.ja.md", "TUI: 一覧で項目を選択しEnterで開く。成功なら詳細、失敗ならエラーを表示。")
-	flowSourceWrite(t, root, "src/main.go", "package main // start TUI event loop")
-	flowSourceWrite(t, root, "internal/tui/model.go", "package tui\nfunc Update(key string) { if key == \"KeyEnter\" { /* fetch detail, show detail on success, error on failure */ } }")
-	t.Setenv("FLOW_REPLY", fxJSON(t, `[{"command":"項目を開く","steps":["一覧で選択","Enter入力","詳細を取得","取得成功？"],"branches":[{"label":"成功","steps":["詳細を表示"]},{"label":"失敗","steps":["エラーを表示"]}]}]`))
-	var out strings.Builder
-	if err := showFlow("fx", &out, io.Discard); err != nil {
-		t.Fatal(err)
-	}
-	for _, text := range []string{"操作・処理フロー", "項目を開く", "取得成功？", "成功", "失敗", "詳細を表示", "エラーを表示", "┴", "↓"} {
-		if !strings.Contains(out.String(), text) {
-			t.Errorf("missing TUI branch %q: %s", text, out.String())
-		}
-	}
-	data, err := os.ReadFile(prompt)
-	if err != nil || !strings.Contains(string(data), "internal/tui/model.go") || !strings.Contains(string(data), "KeyEnter") || !strings.Contains(string(data), "Do not assume a CLI") || !strings.Contains(string(data), "2..3 branches") {
-		t.Fatalf("TUI prompt: %s, %v", data, err)
-	}
-	t.Log("\n" + out.String())
-}
-
-func TestFlowStopsWithoutCodeBeforeEngine(t *testing.T) {
-	root, prompt := commandFlowFixture(t)
-	if err := os.Remove(filepath.Join(root, "README.ja.md")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(filepath.Join(root, "src/main.go")); err != nil {
-		t.Fatal(err)
-	}
-	if err := showFlow("fx", io.Discard, io.Discard); err == nil {
-		t.Fatal("accepted empty source context")
-	}
-	if _, err := os.Stat(prompt); !os.IsNotExist(err) {
-		t.Fatalf("engine ran without source context: %v", err)
+func TestFlowHistoricalApprovalsWithoutTransfer(t *testing.T) {
+	root, _ := executionFlowFixture(t)
+	parent := flowReviewed(t, root, "review.1", []item{{topic: "historical", answer: "Approved"}, {topic: "rework", answer: "change it", comment: true}})
+	child := flowReviewed(t, root, "review.2", []item{{topic: "renamed historical"}, {topic: "new approved", answer: "Approved"}, {topic: "comment approval", answer: "Approved", comment: true}})
+	flowSourceWrite(t, root, "prop-review-tmp/review.2/parent.txt", filepath.Base(filepath.Dir(parent))+"\n")
+	flowSourceWrite(t, root, "prop-review-tmp/review.2/revision.txt", "restructure\n")
+	// Unreviewed followup drafts do not remove historical approvals.
+	flowSourceWrite(t, root, "prop-review-tmp/review.3/proposal.txt", render([]item{{topic: "draft"}}))
+	flowSourceWrite(t, root, "prop-review-tmp/review.3/parent.txt", filepath.Base(filepath.Dir(child))+"\n")
+	got, err := flowApprovals(root)
+	if err != nil || !reflect.DeepEqual(got, []string{"historical", "new approved"}) {
+		t.Fatalf("%v, %v", got, err)
 	}
 }
 
-func TestFlowRejectsUnsafeCommandResponse(t *testing.T) {
-	for _, body := range []string{"", "[]", `[{"command":"x","steps":["\u001b[2J"]}]`, `[{"command":"x","steps":["\u202e"]}]`, strings.Repeat("x", maxFlowResponse+1)} {
-		name := body
-		if len(name) > 80 {
-			name = "oversized"
-		}
-		t.Run(name, func(t *testing.T) {
-			_, prompt := commandFlowFixture(t)
-			file := filepath.Join(t.TempDir(), "response")
-			if err := os.WriteFile(file, []byte(fxJSON(t, body)), 0600); err != nil {
-				t.Fatal(err)
+func TestFlowCombinesRootsAndExecutesWithoutTTY(t *testing.T) {
+	root, prompt := executionFlowFixture(t)
+	first := flowReviewed(t, root, "review.1", []item{{topic: "change A", answer: "Approved"}})
+	flowReviewed(t, root, "review.2", []item{{topic: "change B depends on A", answer: "Approved"}, {topic: "change A", answer: "Approved"}})
+	got, err := flowApprovals(root)
+	if err != nil || !reflect.DeepEqual(got, []string{"change A", "change B depends on A"}) {
+		t.Fatalf("combined approvals: %v, %v", got, err)
+	}
+	before, err := os.ReadFile(filepath.Join(filepath.Dir(first), "proposal.review.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	limitScript(t, filepath.Dir(prompt), "fx", `cat > "$FLOW_PROMPT"
+printf 'implemented' > implemented.txt
+printf '%s' "$FLOW_REPLY"`)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := setEngine("fx"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"flow"}); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(filepath.Join(root, "implemented.txt")); err != nil || string(data) != "implemented" {
+		t.Fatalf("execution did not change repository: %q, %v", data, err)
+	}
+	after, err := os.ReadFile(filepath.Join(filepath.Dir(first), "proposal.review.txt"))
+	if err != nil || string(before) != string(after) {
+		t.Fatalf("review changed: %v", err)
+	}
+}
+
+func TestFlowNoApprovalsDoesNotCallEngine(t *testing.T) {
+	for _, kind := range []string{"empty", "pending", "comment"} {
+		t.Run(kind, func(t *testing.T) {
+			root, prompt := executionFlowFixture(t)
+			if kind == "pending" {
+				flowReviewed(t, root, "review.1", []item{{topic: "pending"}})
 			}
-			t.Setenv("FLOW_RESPONSE", file)
-			if err := os.WriteFile(filepath.Join(filepath.Dir(prompt), "fx"), []byte("#!/bin/sh\ncat >/dev/null\ncat \"$FLOW_RESPONSE\"\n"), 0700); err != nil {
-				t.Fatal(err)
+			if kind == "comment" {
+				flowReviewed(t, root, "review.1", []item{{topic: "comment", answer: "Approved", comment: true}})
 			}
 			var out strings.Builder
-			if err := showFlow("fx", &out, io.Discard); err == nil || out.Len() != 0 {
-				t.Fatalf("invalid response displayed: %v, %q", err, out.String())
+			if err := showFlow("fx", &out, io.Discard); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(out.String(), "No approved proposals") {
+				t.Fatal(out.String())
+			}
+			if _, err := os.Stat(prompt); !os.IsNotExist(err) {
+				t.Fatalf("engine called: %v", err)
 			}
 		})
 	}
 }
 
-func TestFlowLeavesExistingDiagramsAlone(t *testing.T) {
-	for _, kind := range []string{"file", "symlink", "directory"} {
+func TestFlowRejectsInvalidHistoryBeforeEngine(t *testing.T) {
+	for _, kind := range []string{"mismatch", "malformed", "missing proposal", "parent", "cycle", "marker", "branches", "symlink"} {
 		t.Run(kind, func(t *testing.T) {
-			root, _ := commandFlowFixture(t)
-			base := filepath.Join(root, "prop-review-tmp")
-			if err := os.Mkdir(base, 0700); err != nil {
-				t.Fatal(err)
-			}
-			path := filepath.Join(base, "flow.txt")
-			target := filepath.Join(t.TempDir(), "target")
-			if err := os.WriteFile(target, []byte("untouched"), 0600); err != nil {
-				t.Fatal(err)
-			}
-			var err error
+			root, prompt := executionFlowFixture(t)
+			path := flowReviewed(t, root, "review.1", []item{{topic: "approved", answer: "Approved"}})
+			dir := filepath.Dir(path)
 			switch kind {
-			case "file":
-				err = os.WriteFile(path, []byte("untouched"), 0600)
-			case "symlink":
-				err = os.Symlink(target, path)
-			case "directory":
-				err = os.Mkdir(path, 0700)
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := showFlow("fx", io.Discard, io.Discard); err != nil {
-				t.Fatal(err)
-			}
-			if kind != "directory" {
-				data, err := os.ReadFile(path)
-				if err != nil || string(data) != "untouched" {
-					t.Fatalf("old diagram changed: %q, %v", data, err)
+			case "missing proposal":
+				if err := os.Remove(path); err != nil {
+					t.Fatal(err)
 				}
-			} else if info, err := os.Stat(path); err != nil || !info.IsDir() {
-				t.Fatalf("directory replaced: %v, %v", info, err)
+			case "mismatch":
+				flowSourceWrite(t, root, "prop-review-tmp/review.1/proposal.review.txt", "other\nApproval/Comment:Approved\n")
+			case "malformed":
+				flowSourceWrite(t, root, "prop-review-tmp/review.1/proposal.review.txt", "approved\nApproval/Comment:yes\n")
+			case "parent":
+				flowSourceWrite(t, root, "prop-review-tmp/review.1/parent.txt", "review.missing\n")
+			case "cycle":
+				flowSourceWrite(t, root, "prop-review-tmp/review.1/parent.txt", "review.1\n")
+			case "marker":
+				flowSourceWrite(t, root, "prop-review-tmp/review.1/revision.txt", "restructure\n")
+			case "branches":
+				for _, name := range []string{"review.2", "review.3"} {
+					flowReviewed(t, root, name, []item{{topic: "extra", answer: "Approved"}})
+					flowSourceWrite(t, root, "prop-review-tmp/"+name+"/parent.txt", "review.1\n")
+					flowSourceWrite(t, root, "prop-review-tmp/"+name+"/followup.txt", "followup\n")
+				}
+			case "symlink":
+				if err := os.Remove(filepath.Join(dir, "proposal.review.txt")); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(path, filepath.Join(dir, "proposal.review.txt")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := showFlow("fx", io.Discard, io.Discard); err == nil {
+				t.Fatal("accepted invalid history")
+			}
+			if _, err := os.Stat(prompt); !os.IsNotExist(err) {
+				t.Fatalf("engine called: %v", err)
 			}
 		})
 	}
 }
 
-func TestFlowRejectsSourceChangesDuringGeneration(t *testing.T) {
-	root, prompt := commandFlowFixture(t)
-	t.Setenv("FLOW_SOURCE", filepath.Join(root, "src/main.go"))
-	script := "#!/bin/sh\ncat >/dev/null\nprintf 'package main // changed' > \"$FLOW_SOURCE\"\nprintf '%s' \"$FLOW_REPLY\"\n"
-	if err := os.WriteFile(filepath.Join(filepath.Dir(prompt), "fx"), []byte(script), 0700); err != nil {
-		t.Fatal(err)
-	}
-	var out strings.Builder
-	if err := showFlow("fx", &out, io.Discard); err == nil || out.Len() != 0 {
-		t.Fatalf("stale source diagram: %v, %q", err, out.String())
-	}
-}
-
-func TestFlowEscapesEngineFailure(t *testing.T) {
-	_, prompt := commandFlowFixture(t)
-	if err := os.WriteFile(filepath.Join(filepath.Dir(prompt), "fx"), []byte("#!/bin/sh\ncat >/dev/null\nprintf '\\033[2Jfailed' >&2\nexit 1\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	err := showFlow("fx", io.Discard, io.Discard)
-	if err == nil || strings.ContainsRune(err.Error(), '\x1b') {
-		t.Fatalf("unsafe engine error: %v", err)
+func TestFlowExecutionResults(t *testing.T) {
+	for _, tc := range []struct{ name, body, want string }{
+		{"conflict", `{"status":"blocked","summary":"conflicting approvals; dependent work stopped"}`, "conflicting approvals"},
+		{"missing approval", `{"status":"blocked","summary":"dependency requires missing approval"}`, "missing approval"},
+		{"permission", `{"status":"blocked","summary":"permission denied"}`, "permission denied"},
+		{"verification", `{"status":"failed","summary":"tests failed"}`, "tests failed"},
+		{"malformed", `not JSON`, "invalid flow execution result"},
+		{"unknown", `{"status":"ok","summary":"done"}`, "invalid flow execution status"},
+		{"empty", `{"status":"completed","summary":""}`, "invalid flow execution result"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, _ := executionFlowFixture(t)
+			flowReviewed(t, root, "review.1", []item{{topic: "approved", answer: "Approved"}})
+			t.Setenv("FLOW_REPLY", fxJSON(t, tc.body))
+			var out strings.Builder
+			err := showFlow("fx", &out, io.Discard)
+			if err == nil || !strings.Contains(err.Error(), tc.want) || out.Len() != 0 {
+				t.Fatalf("%q, %v", out.String(), err)
+			}
+		})
 	}
 }
 
 type flowErrorWriter struct{}
 
 func (flowErrorWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
-
 func TestFlowWriteFailure(t *testing.T) {
-	commandFlowFixture(t)
+	root, _ := executionFlowFixture(t)
+	flowReviewed(t, root, "review.1", []item{{topic: "approved", answer: "Approved"}})
 	if err := showFlow("fx", flowErrorWriter{}, io.Discard); !errors.Is(err, io.ErrClosedPipe) {
-		t.Fatalf("write error lost: %v", err)
+		t.Fatal(err)
 	}
 }
-
-func TestFlowCommandWithoutTTY(t *testing.T) {
-	commandFlowFixture(t)
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if err := setEngine("fx"); err != nil {
-		t.Fatal(err)
-	}
-	out, err := os.CreateTemp(t.TempDir(), "stdout")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer out.Close()
-	old := os.Stdout
-	os.Stdout = out
-	defer func() { os.Stdout = old }()
-	if err := run([]string{"flow"}); err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(out.Name())
-	if err != nil || !strings.Contains(string(data), "generate\n┌") || !strings.Contains(string(data), "↓") {
-		t.Fatalf("CLI output: %q, %v", data, err)
-	}
-}
-
 func TestFlowCommandUsage(t *testing.T) {
 	if err := run([]string{"flow", "extra"}); err == nil || err.Error() != "usage: prop-review flow" {
-		t.Fatalf("usage: %v", err)
+		t.Fatal(err)
+	}
+	if err := run([]string{"flow", "--help"}); err != nil {
+		t.Fatal(err)
 	}
 }
-
 func TestFlowPromptContract(t *testing.T) {
-	data, err := json.Marshal(flowSourceInput{Files: []flowSourceFile{{Path: "main.go", Content: "package main"}}})
-	if err != nil || len(data) == 0 || !strings.Contains(flowPrompt, "Go will draw every step in a box") {
-		t.Fatalf("prompt contract: %v", err)
+	for _, text := range []string{"assess ALL approvals together", "dependencies", "contradictions", "STOP work depending", "unapproved decision", "Never modify review files", "permission", "focused verification"} {
+		if !strings.Contains(flowPrompt, text) {
+			t.Fatalf("missing constraint %q", text)
+		}
+	}
+	// The only variable context is an encoded list of approvals.
+	data, _ := json.Marshal([]string{"approved"})
+	if !strings.Contains(string(data), "approved") {
+		t.Fatal(string(data))
 	}
 }

@@ -100,6 +100,10 @@ func reviewHistory(root, selected string, requireRequest bool) ([]reviewStep, st
 	if err != nil {
 		return nil, "", err
 	}
+	return reviewHistoryPaths(root, selected, requireRequest, paths)
+}
+
+func reviewHistoryPaths(root, selected string, requireRequest bool, paths []string) ([]reviewStep, string, error) {
 	base := filepath.Join(root, "prop-review-tmp")
 	known := make(map[string]string, len(paths))
 	children := make(map[string][]string)
