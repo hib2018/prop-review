@@ -69,6 +69,20 @@ func run(args []string) error {
 		}
 		return withRawTTY(func(tty *os.File) error { return deleteProposal(root, tty, tty) })
 	}
+	if len(args) > 0 && args[0] == "diff" {
+		if len(args) == 2 && args[1] == "--help" {
+			fmt.Println("usage: prop-review diff (or prev diff)\nCompare flow's explicit approvals semantically against the current repository-root working tree, including uncommitted changes; not a Git line diff. Report implementation gaps, evidence, unknowns, and four-status totals. Invalid history or engine responses fail; zero approvals starts no engine. No implementation, fixes, proposals, approval/history changes, or new persistent state. Pi uses read-only SDK tools; fx follows local permissions, not an enforced read-only sandbox. Uses the selected Pi/fx engine with a 10-minute timeout.")
+			return nil
+		}
+		if len(args) != 1 {
+			return errors.New("usage: prop-review diff")
+		}
+		engine, err := selectedEngine()
+		if err != nil {
+			return err
+		}
+		return showDiff(engine, os.Stdout, os.Stderr)
+	}
 	if len(args) > 0 && args[0] == "flow" {
 		if len(args) == 2 && args[1] == "--help" {
 			fmt.Println("usage: prop-review flow\nExecute only explicitly approved proposals from validated repository review histories using the selected Pi/fx engine. Conflicts or missing approvals stop dependent work. No approvals means no engine call or changes.")
@@ -127,7 +141,7 @@ func run(args []string) error {
 		return generate(args[0] == "revise", engine, "")
 	}
 	if len(args) > 2 {
-		return errors.New("usage: prop-review [doctor|init|ingest [pi|fx]|delete|engine|--engine pi|fx|generate|clarify|flow|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
+		return errors.New("usage: prop-review [doctor|init|ingest [pi|fx]|delete|engine|--engine pi|fx|generate|clarify|diff|flow|revise [proposal.txt]|issue|proposal.txt [result.txt]]")
 	}
 	if len(args) == 0 {
 		root, err := repoRoot()
