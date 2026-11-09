@@ -124,7 +124,7 @@ func TestFXAndRevision(t *testing.T) {
 		t.Fatalf("second revision parent: %q, %v", link, err)
 	}
 	args, err := os.ReadFile(argsPath)
-	if err != nil || strings.TrimSpace(string(args)) != "ask --no-save --json" {
+	if err != nil || strings.TrimSpace(string(args)) != "ask --no-save --json --quiet" {
 		t.Fatalf("fx args: %s, %v", args, err)
 	}
 	stdin, err = os.ReadFile(stdinPath)
