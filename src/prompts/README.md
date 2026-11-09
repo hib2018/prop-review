@@ -9,6 +9,7 @@
 | `revise.txt` | `revise` とコメント付き `clarify` の提案全体の再構成 | `%s`: 元の依頼・承認済み決定・全レビュー履歴・現在の未解決項目の共通JSON |
 | `clarify.txt` | 新しい確認事項の抽出 | `%s`: 履歴JSON、`%d`: 追加可能件数 |
 | `flow.txt` | CLI/TUIの主要操作と重要な分岐を生成 | `%s`: README・選択ソースのJSON |
+| `diff.txt` | 承認要件と現在の作業ツリーの意味的な照合 | `%s`: `flowApprovals` が返す承認文のJSON配列 |
 
 ## 編集時の注意
 
