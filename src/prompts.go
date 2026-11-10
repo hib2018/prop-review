@@ -19,6 +19,3 @@ var clarifyPrompt string
 
 //go:embed prompts/flow.txt
 var flowPrompt string
-
-//go:embed prompts/diff.txt
-var diffPrompt string

@@ -33,7 +33,7 @@ This installs both skills into the repository's `.pi/skills/` and `.agents/skill
 
 ## Commands
 
-Run inside a Git repository. Displayed paths are abbreviated within the repository: the common `prop-review-tmp/` prefix is omitted, so a proposal appears as `review.xxx/proposal.txt`. The actual file remains under `prop-review-tmp/`; include that prefix when passing a path back to the CLI. `prev` is a shorter name accepting the same commands and arguments as `prop-review` (for example, `prev flow`). `generate`, `issue`, `revise`, `clarify`, `ingest`, `diff`, and `flow` use its `prop-review-tmp/` directory. `diff` compares approved items with the current working tree; `flow` executes approved items from validated review histories.
+Run inside a Git repository. Displayed paths are abbreviated within the repository: the common `prop-review-tmp/` prefix is omitted, so a proposal appears as `review.xxx/proposal.txt`. The actual file remains under `prop-review-tmp/`; include that prefix when passing a path back to the CLI. `prev` is a shorter name accepting the same commands and arguments as `prop-review` (for example, `prev flow`). `generate`, `issue`, `revise`, `clarify`, `ingest`, and `flow` use its `prop-review-tmp/` directory. `flow` executes approved items from validated review histories.
 
 ### `prop-review init` / `prev init`
 
@@ -111,20 +111,6 @@ prop-review clarify
 ```
 
 Select a root request or issue title and validate its full review history. If active unresolved comments remain, reconstruct the whole proposal using the same history and approved constraints as `revise`: items may be merged, split, removed, added, or reordered, including pending items and necessary additional questions. Even with 10 or more unresolved items, the engine runs and its output must contain 1–10 valid, unique items. The new proposal links to the latest review via `parent.txt` and `revision.txt` (`restructure\n`), superseding all earlier unresolved items without revoking historical approvals. All new items are unapproved, including unchanged wording. Without active comments, carry pending items forward and look only for additional questions; save this proposal with `followup.txt` and `parent.txt`. If everything is resolved and no additional questions are needed, save nothing. `clarify` starts review after saving, never implementation; `revise` still does not start review automatically. Legacy roots without both `request.txt` and a valid `issue.json`, missing or invalid results, and ambiguous histories fail. A valid root `issue.json` takes precedence over `request.txt`: its title restores the request and its snapshot supplies the original issue context, even if `request.txt` is missing. An invalid `issue.json` fails without falling back to `request.txt`. Generation failures save nothing.
-
-### `prop-review diff` / `prev diff`
-
-```sh
-prop-review diff
-# Equivalent short command:
-prev diff
-```
-
-Use the selected Pi/fx engine to compare explicit approvals semantically against the current repository-root working tree, including uncommitted changes—not a Git line diff. Approval collection is identical to `flow` (`flowApprovals`): collect and deduplicate explicit approvals across all reviewed series, including historical approvals. Unreviewed drafts, pending items, comments, original requests, and issue content are excluded. Invalid or ambiguous history fails; with zero approvals, no engine starts.
-
-The report includes the approved text, shortages, and evidence files/locations (or explicitly no evidence) for missing or partially implemented items. Unknown items are listed separately with reasons. Totals cover all four statuses: `implemented`, `partial`, `missing`, and `unknown`. Structured responses are validated for correspondence to the approvals, completeness, valid statuses, and required report fields; duplicate fields, invalid responses, or engine failures are errors, never an “all implemented” result. Evidence paths must resolve to regular files within the repository. These checks do not mechanically prove that the cited locations establish the claimed behavior.
-
-`diff` reuses the read engine (`engineResponse`), not the executing `flowEngineResponse`, with a diff-specific 10-minute timeout. Pi uses only the SDK's read/grep/find/ls tools. fx uses normal local permissions and settings, not an enforced read-only sandbox; instructions forbid implementation, file modifications, new proposals, and approval/history changes. No new persistent state is created. Mock tests do not guarantee real-engine permission enforcement or absence of side effects from local settings, hooks, or plugins.
 
 ### `prop-review flow`
 
