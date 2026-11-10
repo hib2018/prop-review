@@ -213,6 +213,11 @@ func engineResponse(root, prompt, engine string, timeout time.Duration, progress
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("%s timed out after %s: %w", engine, timeout, ctx.Err())
 	}
+	if engine == "fx" {
+		if quotaErr := fxUsageLimitError(stdout.Bytes(), stderr.String()); quotaErr != nil {
+			return nil, quotaErr
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%s failed: %w: %q", engine, err, strings.TrimSpace(stderr.String()))
 	}
@@ -248,8 +253,34 @@ func startSpinner(progress io.Writer, activity, engine string) func() {
 	return func() { once.Do(func() { close(done); <-finished }) }
 }
 
+// Quota is a user-action signal, not a transient HTTP 429 or a provider-request safety limit.
+func fxUsageLimitError(output []byte, stderr string) error {
+	var response struct {
+		ExitCode *int `json:"exit_code"`
+		Recovery *struct {
+			State   string `json:"state"`
+			Need    string `json:"need"`
+			Message string `json:"message"`
+		} `json:"recovery"`
+	}
+	if json.Unmarshal(output, &response) != nil || response.ExitCode == nil || *response.ExitCode == 0 || response.Recovery == nil || response.Recovery.State != "need_user" || response.Recovery.Need != "quota" {
+		return nil
+	}
+	reason := strings.TrimSpace(response.Recovery.Message)
+	if reason == "" {
+		reason = strings.TrimSpace(stderr)
+	}
+	if reason == "" {
+		return errors.New("fx plan usage limit reached")
+	}
+	return fmt.Errorf("fx plan usage limit reached: %q", reason)
+}
+
 // fx's output includes intermediate commentary; only final_output is a task result.
 func fxResponse(output []byte) ([]byte, error) {
+	if err := fxUsageLimitError(output, ""); err != nil {
+		return nil, err
+	}
 	var response struct {
 		FinalOutput *string `json:"final_output"`
 		ExitCode    *int    `json:"exit_code"`

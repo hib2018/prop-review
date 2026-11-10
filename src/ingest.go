@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -80,13 +81,21 @@ func fxIngestSession(root, prompt string) (string, error) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "fx", "ask", "--json", "--prompt-permissions", "--", prompt)
 	cmd.Dir = root
-	cmd.Stdin, cmd.Stderr = os.Stdin, os.Stderr
+	cmd.Stdin = os.Stdin
 	cmd.WaitDelay = time.Second
 	output := &limitedCapture{limit: maxEngineOutputBytes, cancel: cancel}
+	stderr := &limitedCapture{limit: maxEngineErrorBytes, cancel: cancel}
 	cmd.Stdout = output
+	cmd.Stderr = io.MultiWriter(os.Stderr, stderr)
 	err := cmd.Run()
 	if output.exceeded.Load() {
 		return "", fmt.Errorf("fx ingest response exceeds %d bytes", maxEngineOutputBytes)
+	}
+	if stderr.exceeded.Load() {
+		return "", fmt.Errorf("fx ingest stderr exceeds %d bytes", maxEngineErrorBytes)
+	}
+	if quotaErr := fxUsageLimitError(output.Bytes(), stderr.String()); quotaErr != nil {
+		return "", quotaErr
 	}
 	if err != nil {
 		return "", fmt.Errorf("fx failed: %w", err)

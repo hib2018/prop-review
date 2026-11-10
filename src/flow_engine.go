@@ -103,6 +103,11 @@ func flowCommandOutput(ctx context.Context, cancel context.CancelFunc, cmd *exec
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("%s timed out after %s: %w", name, timeout, ctx.Err())
 	}
+	if name == "fx" {
+		if quotaErr := fxUsageLimitError(stdout.Bytes(), stderr.String()); quotaErr != nil {
+			return nil, quotaErr
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%s failed: %w: %q", name, err, strings.TrimSpace(stderr.String()))
 	}
