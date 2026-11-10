@@ -1,0 +1,1 @@
+{"output":"","final_output":"","exit_code":1,"model":"test/model","resolved_provider":null,"session_id":"test-session","steps":0,"tool_calls":[],"usage":{"input_tokens":null,"output_tokens":null},"recovery":{"state":"need_user","need":"quota","attempt":1,"message":"Out of credits"}}
