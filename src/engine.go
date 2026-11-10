@@ -166,7 +166,7 @@ func engineResponse(root, prompt, engine string, timeout time.Duration, progress
 	var cmd *exec.Cmd
 	switch engine {
 	case "fx":
-		cmd = exec.CommandContext(ctx, "fx", "ask", "--no-save", "--json", "--quiet")
+		cmd = exec.CommandContext(ctx, "fx", "ask", "--no-save", "--json")
 		cmd.Stdin = strings.NewReader(prompt)
 	case "pi":
 		npm := exec.CommandContext(ctx, "npm", "root", "-g")

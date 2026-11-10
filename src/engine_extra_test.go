@@ -78,22 +78,6 @@ func TestFxResponse(t *testing.T) {
 	}
 }
 
-func TestFxQuietKeepsFinalJSON(t *testing.T) {
-	bin := t.TempDir()
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("FX_RESPONSE", fxJSON(t, "completed comparison"))
-	limitScript(t, bin, "fx", `cat >/dev/null
-case "$*" in
-  'ask --no-save --json --quiet') ;;
-  *) head -c 65537 /dev/zero >&2; exit 1 ;;
-esac
-printf '%s' "$FX_RESPONSE"`)
-	response, err := engineResponse(t.TempDir(), "read only", "fx", 3*time.Second, io.Discard, "Comparing")
-	if err != nil || string(response) != "completed comparison" {
-		t.Fatalf("quiet final response: %q, %v", response, err)
-	}
-}
-
 func TestFxFinalOutputStillValidated(t *testing.T) {
 	bin := t.TempDir()
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
